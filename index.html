@@ -21,6 +21,16 @@
   <script>
 const { useState, useEffect, useCallback, createElement: h } = React;
 
+// ── API ──
+const API_URL = 'https://script.google.com/macros/s/AKfycbx1HGcTQEaG3fH3QovWQpL-4GgjMqM_9mH4wYaA2_RDhbDPvYAuVfGtUCQ0enxnWy3G/exec';
+function callApi(action, payload){
+  // No Content-Type header → avoids CORS preflight (Apps Script doesn't handle OPTIONS)
+  return fetch(API_URL, {
+    method:'POST',
+    body: JSON.stringify(Object.assign({action:action}, payload||{}))
+  }).then(function(r){return r.json()});
+}
+
 // ── Theme ──
 const T = {
   navy:'#003764', navyL:'#0a4a7a', navyD:'#002244',
@@ -61,26 +71,39 @@ function GoogleIcon(){
   );
 }
 
-// ── Mock Data ──
+// ── Mock Data (courses — Phase 3 미연동분 fallback. documents는 Google login mock에서만 사용) ──
 var MOCK = {
-  name:'Rebeca Baek', employeeId:'3006463', email:'rebeca@example.com',
-  dept:'Office of International Affairs', position:'Adjunct Professor', nationality:'Brazilian',
   courses:[
     {code:'GLC3146',title:'Korean Pop Culture and Visual Art',period:'6-week',schedule:'Mon/Wed 10:00-11:50',room:'Samsung Hall 401',students:45,syllabusUploaded:true},
     {code:'GLC2138',title:'Introduction to Korean Studies',period:'6-week',schedule:'Tue/Thu 14:00-15:50',room:'Daewoo Hall 201',students:38,syllabusUploaded:false},
   ],
   documents:{
-    contract:{status:'signed',date:'2026-03-15',fileName:'Contract_Rebeca_Baek.pdf'},
-    reappointment:{status:'submitted',date:'2026-04-01',files:['Employment_Certificate.pdf','Passport_Copy.jpg','Consent_Form.pdf']},
-    syllabus:{status:'partial',submitted:1,total:2},
+    contract:{status:'pending',date:'',fileName:'Contract.pdf',link:null,downloadUrl:null},
+    reappointment:{applicable:false},
+    syllabus:{status:'pending',submitted:0,total:0,courses:[]},
   },
-  notices:[
-    {id:1,title:'YISS 2026 Faculty Orientation',date:'2026-06-26',priority:'high',content:'Please attend the faculty orientation on June 26 at 9:00 AM in Baekyang Hall. The orientation will cover course logistics, campus tour, and administrative procedures.'},
-    {id:2,title:'Syllabus Submission Deadline',date:'2026-05-15',priority:'medium',content:'All syllabi must be submitted by May 15, 2026 through the Faculty Portal. Please ensure your syllabus follows the YISS template.'},
-    {id:3,title:'Grade Submission Guidelines',date:'2026-04-10',priority:'low',content:'Grades must be submitted within 5 business days after the final exam through the Yonsei Portal.'},
-    {id:4,title:'Campus Facilities Guide',date:'2026-04-05',priority:'low',content:'Information about International House, library access, cafeteria, and gym facilities for summer faculty.'},
-  ]
 };
+
+// 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
+function loadPortalData(token){
+  return Promise.all([
+    callApi('getDashboard',{token:token}),
+    callApi('getNotices',{token:token})
+  ]).then(function(results){
+    var dash=results[0], nx=results[1];
+    if(dash.expired||nx.expired) return null;
+    if(!dash.success) return null;
+    var docs = dash.documents || MOCK.documents;
+    var courses = (docs.syllabus && docs.syllabus.courses) ? docs.syllabus.courses.map(function(c){
+      return { code:c.code, title:c.title, syllabusUploaded:c.status==='submitted', link:c.link };
+    }) : MOCK.courses;
+    return Object.assign({},MOCK,dash.faculty,{
+      notices:(nx.success&&nx.notices)?nx.notices:[],
+      documents: docs,
+      courses: courses,
+    });
+  });
+}
 
 // ── Helpers ──
 function S(){return Object.assign.apply(null,[{}].concat(Array.prototype.slice.call(arguments)))}
@@ -98,7 +121,8 @@ function Badge(props){
 
 // ── Main App ──
 function App(){
-  var _s=useState('login'),screen=_s[0],setScreen=_s[1];
+  var initialScreen = (typeof sessionStorage!=='undefined' && sessionStorage.getItem('portal_token')) ? 'restoring' : 'login';
+  var _s=useState(initialScreen),screen=_s[0],setScreen=_s[1];
   var _e=useState(''),email=_e[0],setEmail=_e[1];
   var _d=useState(''),dob=_d[0],setDob=_d[1];
   var _o=useState(''),otp=_o[0],setOtp=_o[1];
@@ -108,26 +132,55 @@ function App(){
   var _f=useState(null),faculty=_f[0],setFaculty=_f[1];
   var _n=useState(null),selNotice=_n[0],setSelNotice=_n[1];
 
+  // 페이지 로드 시 세션 복원 시도
+  useEffect(function(){
+    if(initialScreen!=='restoring') return;
+    var token=sessionStorage.getItem('portal_token');
+    loadPortalData(token).then(function(data){
+      if(data){setFaculty(data);setScreen('portal');}
+      else{sessionStorage.removeItem('portal_token');setScreen('login');}
+    }).catch(function(){
+      // 네트워크 에러: 토큰 보존하고 로그인 화면으로 (다음 시도에서 복원 재시도 가능)
+      setScreen('login');
+    });
+  },[]);
+
   function handleEmailLogin(){
+    if(!email.includes('@')){setError('Please enter a valid email address.');return;}
+    if(!dob){setError('Please enter your date of birth.');return;}
     setLoading(true);setError('');
-    setTimeout(function(){
-      if(!email.includes('@')){setError('Please enter a valid email address.');setLoading(false);return;}
-      if(!dob){setError('Please enter your date of birth.');setLoading(false);return;}
-      setScreen('otp');setLoading(false);
-    },800);
+    callApi('verifyIdentity',{email:email,birthDate:dob}).then(function(res){
+      setLoading(false);
+      if(res.success){setScreen('otp');setOtp('');}
+      else{setError(res.message||'Verification failed.');}
+    }).catch(function(){
+      setLoading(false);setError('Network error. Please try again.');
+    });
   }
   function handleOtpVerify(){
+    if(otp.length!==6){setError('Please enter the 6-digit code.');return;}
     setLoading(true);setError('');
-    setTimeout(function(){
-      if(otp.length!==6){setError('Please enter the 6-digit code.');setLoading(false);return;}
-      setFaculty(MOCK);setScreen('portal');setLoading(false);
-    },600);
+    callApi('verifyOtp',{email:email,otp:otp}).then(function(res){
+      if(!(res.success&&res.token)){
+        setLoading(false);setError(res.message||'Verification failed.');return;
+      }
+      sessionStorage.setItem('portal_token',res.token);
+      return loadPortalData(res.token).then(function(data){
+        setLoading(false);
+        if(data){setFaculty(data);setScreen('portal');}
+        else{sessionStorage.removeItem('portal_token');setError('Failed to load portal data.');}
+      });
+    }).catch(function(){
+      setLoading(false);setError('Network error. Please try again.');
+    });
   }
   function handleGoogleLogin(){
+    // Task 3에서 Google Identity Services로 교체
     setLoading(true);
-    setTimeout(function(){setFaculty(MOCK);setScreen('portal');setLoading(false);},1000);
+    setTimeout(function(){setFaculty(Object.assign({name:'Demo',employeeId:'0',email:'demo@example.com'},MOCK));setScreen('portal');setLoading(false);},1000);
   }
   function handleLogout(){
+    sessionStorage.removeItem('portal_token');
     setScreen('login');setFaculty(null);setEmail('');setDob('');setOtp('');setError('');setTab('dashboard');setSelNotice(null);
   }
 
@@ -136,6 +189,13 @@ function App(){
   var loginBg = {minHeight:'100vh',background:'linear-gradient(135deg,'+T.navyD+' 0%,'+T.navy+' 50%,'+T.navyL+' 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'Noto Sans',-apple-system,sans-serif"};
   var inputStyle = function(v){return{width:'100%',padding:'10px 14px',border:'1.5px solid '+T.bdr,borderRadius:8,fontSize:14,fontFamily:'inherit',outline:'none',boxSizing:'border-box'}};
   var btnPrimary = {width:'100%',padding:'12px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:14,fontWeight:600,fontFamily:'inherit'};
+
+  // ── RESTORING (세션 복원 중) ──
+  if(screen==='restoring'){
+    return h('div',{style:loginBg},
+      h('div',{style:{color:'rgba(255,255,255,.7)',fontSize:13,fontFamily:"'Noto Sans',-apple-system,sans-serif"}},'Restoring session...')
+    );
+  }
 
   // ── LOGIN ──
   if(screen==='login'){
@@ -214,11 +274,10 @@ function App(){
       h('div',{style:{background:'linear-gradient(135deg,'+T.navy+','+T.navyL+')',borderRadius:14,padding:'28px 24px',color:'#fff'}},
         h('p',{style:{fontSize:13,opacity:.7,margin:'0 0 4px'}},'Welcome back,'),
         h('h2',{style:{fontSize:24,fontWeight:700,margin:'0 0 4px',fontFamily:"'Playfair Display',serif"}},faculty.name),
-        h('p',{style:{fontSize:13,opacity:.6,margin:0}},faculty.position+' · '+faculty.dept),
-        h('p',{style:{fontSize:12,opacity:.5,margin:'4px 0 0'}},'Faculty ID: '+faculty.employeeId)
+        h('p',{style:{fontSize:12,opacity:.6,margin:'4px 0 0'}},'Faculty ID: '+faculty.employeeId)
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12}},
-        [{l:'Courses',v:faculty.courses.length,c:T.navy},{l:'Contract',v:'Signed',c:T.green},{l:'Syllabus',v:faculty.documents.syllabus.submitted+'/'+faculty.documents.syllabus.total,c:faculty.documents.syllabus.submitted===faculty.documents.syllabus.total?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].map(function(s,i){
+        [{l:'Courses',v:faculty.courses.length,c:T.navy},{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Syllabus',v:faculty.documents.syllabus.submitted+'/'+faculty.documents.syllabus.total,c:faculty.documents.syllabus.status==='submitted'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].map(function(s,i){
           return h(Card,{key:i,style:{textAlign:'center',padding:'18px 12px'}},
             h('div',{style:{fontSize:24,fontWeight:700,color:s.c}},s.v),
             h('div',{style:{fontSize:12,color:T.sub,marginTop:2}},s.l));
@@ -226,13 +285,28 @@ function App(){
       ),
       h(Card,null,
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 14px'}},'Action Required'),
-        faculty.courses.filter(function(c){return!c.syllabusUploaded}).map(function(c,i){
-          return h('div',{key:i,style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.amberL,borderRadius:8,marginBottom:8}},
-            h('span',{style:{color:T.amber}},Icons.alert()),
-            h('span',{style:{fontSize:13}},'Upload syllabus for ',h('strong',null,c.code+' '+c.title)));
-        }),
-        faculty.courses.every(function(c){return c.syllabusUploaded})&&h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
-          h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'))
+        (function(){
+          var actions=[];
+          if(faculty.documents.contract.status!=='signed'){
+            actions.push({key:'contract',label:'Sign your employment contract',link:faculty.documents.contract.link});
+          }
+          if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
+            actions.push({key:'reappointment',label:'Submit reappointment documents',link:null});
+          }
+          faculty.courses.filter(function(c){return!c.syllabusUploaded}).forEach(function(c){
+            actions.push({key:'syl-'+c.code,label:'Submit syllabus for '+c.code+' '+c.title,link:c.link});
+          });
+          if(actions.length===0){
+            return h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
+              h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
+          }
+          return actions.map(function(a){
+            return h('div',{key:a.key,style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.amberL,borderRadius:8,marginBottom:8}},
+              h('span',{style:{color:T.amber}},Icons.alert()),
+              h('span',{style:{fontSize:13,flex:1}},a.label),
+              a.link?h('a',{href:a.link,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:T.navy,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap'}},'Open →'):null);
+          });
+        })()
       ),
       h(Card,null,
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 14px'}},'Recent Notices'),
@@ -250,21 +324,19 @@ function App(){
   function CoursesTab(){
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
       h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'My Courses'),
-      faculty.courses.map(function(c,i){
+      faculty.courses.length===0?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'No courses assigned yet.'))
+      :faculty.courses.map(function(c,i){
         return h(Card,{key:i},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}},
             h('div',null,
               h('span',{style:{fontSize:11,fontWeight:700,color:T.navy,background:'rgba(0,55,100,.08)',padding:'3px 8px',borderRadius:4}},c.code),
-              h('h3',{style:{fontSize:16,fontWeight:700,color:T.text,margin:'8px 0 0'}},c.title)),
-            h('span',{style:{padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:600,background:'rgba(0,55,100,.06)',color:T.navy}},c.period)),
-          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,color:T.sub,marginBottom:16}},
-            h('div',null,'📅 '+c.schedule),h('div',null,'📍 '+c.room),
-            h('div',null,'👥 '+c.students+' students'),
-            h('div',null,'📄 Syllabus: ',c.syllabusUploaded?h('span',{style:{color:T.green,fontWeight:600}},'Uploaded'):h('span',{style:{color:T.amber,fontWeight:600}},'Not uploaded'))),
-          h('div',{style:{display:'flex',gap:8}},
-            c.syllabusUploaded?
-              h('button',{style:{padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}},Icons.download(),' Download Syllabus'):
-              h('button',{style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit'}},'Upload Syllabus'))
+              h('h3',{style:{fontSize:16,fontWeight:700,color:T.text,margin:'8px 0 0'}},c.title))),
+          h('div',{style:{fontSize:13,color:T.sub,marginBottom:16}},
+            '📄 Syllabus: ',c.syllabusUploaded?h('span',{style:{color:T.green,fontWeight:600}},'Submitted'):h('span',{style:{color:T.amber,fontWeight:600}},'Not submitted')),
+          c.link?
+            h('a',{href:c.link,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-block',padding:'8px 16px',background:c.syllabusUploaded?'rgba(0,55,100,.06)':T.navy,color:c.syllabusUploaded?T.navy:'#fff',textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600}},c.syllabusUploaded?'Edit Syllabus →':'Submit Syllabus →')
+          :null
         );
       })
     );
@@ -277,13 +349,19 @@ function App(){
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Employment Contract'),
           Badge({status:faculty.documents.contract.status})),
-        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},'Signed on '+faculty.documents.contract.date),
-        h('button',{style:{padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}},Icons.download(),' '+faculty.documents.contract.fileName)),
-      h(Card,null,
+        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.contract.status==='signed'?('Signed on '+faculty.documents.contract.date):'Awaiting signature'),
+        faculty.documents.contract.status==='signed'?
+          (faculty.documents.contract.downloadUrl?
+            h('a',{href:faculty.documents.contract.downloadUrl,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},Icons.download(),' '+faculty.documents.contract.fileName)
+          :h('span',{style:{fontSize:12,color:T.sub}},'PDF not available'))
+        :faculty.documents.contract.link?
+          h('a',{href:faculty.documents.contract.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Sign Contract →')
+        :null),
+      faculty.documents.reappointment.applicable&&h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📄 Reappointment Documents'),
           Badge({status:faculty.documents.reappointment.status})),
-        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},'Submitted on '+faculty.documents.reappointment.date),
+        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.reappointment.files.length===0?'No documents submitted yet':('Last submitted on '+faculty.documents.reappointment.date)),
         h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
           faculty.documents.reappointment.files.map(function(f,i){
             return h('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'#f8f9fb',borderRadius:8}},
@@ -293,8 +371,21 @@ function App(){
       h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📋 Syllabus Submission'),
-          Badge({status:faculty.documents.syllabus.submitted===faculty.documents.syllabus.total?'submitted':'partial'})),
-        h('p',{style:{fontSize:13,color:T.sub,margin:0}},faculty.documents.syllabus.submitted+' of '+faculty.documents.syllabus.total+' syllabi submitted'))
+          Badge({status:faculty.documents.syllabus.status})),
+        faculty.documents.syllabus.total===0?
+          h('p',{style:{fontSize:13,color:T.sub,margin:0}},'No syllabi assigned')
+        :h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+            h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 4px'}},faculty.documents.syllabus.submitted+' of '+faculty.documents.syllabus.total+' syllabi submitted'),
+            faculty.documents.syllabus.courses.map(function(c,i){
+              var submitted=c.status==='submitted';
+              return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:submitted?T.greenL:T.amberL,borderRadius:8,gap:10}},
+                h('div',{style:{display:'flex',flexDirection:'column',gap:2,minWidth:0,flex:1}},
+                  h('div',{style:{fontSize:13,fontWeight:600,color:T.text}},c.code+' · '+c.title),
+                  h('div',{style:{fontSize:12,color:T.sub}},submitted?('Submitted '+c.submittedAt):'Awaiting submission')),
+                c.link?
+                  h('a',{href:c.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'6px 12px',background:submitted?'rgba(0,55,100,.06)':T.navy,color:submitted?T.navy:'#fff',textDecoration:'none',borderRadius:6,fontSize:12,fontWeight:600,whiteSpace:'nowrap'}},submitted?'Edit →':'Submit →')
+                :null);
+            })))
     );
   }
 
