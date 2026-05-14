@@ -31,6 +31,31 @@ function callApi(action, payload){
   }).then(function(r){return r.json()});
 }
 
+// Drive 파일을 Apps Script로 proxy 다운로드 (session 검증 후 base64 → blob 다운로드 트리거)
+function downloadProxyFile(fileType){
+  var token = (typeof sessionStorage!=='undefined') ? sessionStorage.getItem('portal_token') : null;
+  return callApi('downloadFile', {token:token, fileType:fileType}).then(function(res){
+    if(!res || !res.success){
+      alert((res && res.message) || 'Download failed');
+      return;
+    }
+    var bin = atob(res.data);
+    var bytes = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    var blob = new Blob([bytes], {type: res.mimeType || 'application/octet-stream'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = res.fileName || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);}, 1000);
+  }).catch(function(err){
+    alert('Download failed: ' + (err && err.message ? err.message : err));
+  });
+}
+
 // ── Theme ──
 const T = {
   navy:'#003764', navyL:'#0a4a7a', navyD:'#002244',
@@ -122,6 +147,7 @@ function App(){
   var _t=useState('dashboard'),tab=_t[0],setTab=_t[1];
   var _f=useState(null),faculty=_f[0],setFaculty=_f[1];
   var _n=useState(null),selNotice=_n[0],setSelNotice=_n[1];
+  var _dl=useState(null),downloading=_dl[0],setDownloading=_dl[1];
 
   // 페이지 로드 시 세션 복원 시도
   useEffect(function(){
@@ -270,7 +296,7 @@ function App(){
             actions.push({key:'contract',label:'Sign your employment contract',link:faculty.documents.contract.link});
           }
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
-            actions.push({key:'reappointment',label:'Submit reappointment documents',link:null});
+            actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
           faculty.courses.filter(function(c){return!c.syllabusUploaded}).forEach(function(c){
             actions.push({key:'syl-'+c.code,label:'Submit syllabus for '+c.code+' '+c.title,link:c.link});
@@ -329,9 +355,16 @@ function App(){
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Employment Contract'),
           Badge({status:faculty.documents.contract.status})),
         h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.contract.status==='signed'?('Signed on '+faculty.documents.contract.date):'Awaiting signature'),
+        faculty.documents.contract.status!=='signed'&&h('div',{style:{padding:'10px 12px',background:T.amberL,borderRadius:8,marginBottom:12,fontSize:12,color:T.text,lineHeight:1.55}},
+          h('strong',{style:{color:T.navy}},'ⓘ Before signing: '),
+          'All program details (invitation letter, welcome letter, program leaflet, academic calendar, business registration, etc.) have been emailed to you. Please review the email carefully before signing the contract.'),
         faculty.documents.contract.status==='signed'?
-          (faculty.documents.contract.downloadUrl?
-            h('a',{href:faculty.documents.contract.downloadUrl,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},Icons.download(),' '+faculty.documents.contract.fileName)
+          (faculty.documents.contract.hasFile?
+            h('button',{onClick:function(){
+              setDownloading('contract');
+              downloadProxyFile('contract').then(function(){setDownloading(null);});
+            },disabled:downloading==='contract',style:{padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,cursor:downloading==='contract'?'wait':'pointer',width:'fit-content',opacity:downloading==='contract'?0.6:1}},
+              downloading==='contract'?'Downloading…':[Icons.download(),' '+faculty.documents.contract.fileName])
           :h('span',{style:{fontSize:12,color:T.sub}},'PDF not available'))
         :faculty.documents.contract.link?
           h('a',{href:faculty.documents.contract.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Sign Contract →')
@@ -341,12 +374,21 @@ function App(){
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📄 Reappointment Documents'),
           Badge({status:faculty.documents.reappointment.status})),
         h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.reappointment.files.length===0?'No documents submitted yet':('Last submitted on '+faculty.documents.reappointment.date)),
-        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+        faculty.documents.reappointment.files.length>0&&h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}},
           faculty.documents.reappointment.files.map(function(f,i){
-            return h('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'#f8f9fb',borderRadius:8}},
+            var canDownload = (f==='Consent Form') && faculty.documents.reappointment.consentAvailable;
+            var isDownloading = downloading==='consent';
+            return h('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'#f8f9fb',borderRadius:8,gap:10}},
               h('span',{style:{fontSize:13,color:T.text}},f),
-              h('button',{style:{background:'none',border:'none',color:T.navy,cursor:'pointer',display:'flex'}},Icons.download()));
-          }))),
+              canDownload?h('button',{onClick:function(){
+                setDownloading('consent');
+                downloadProxyFile('consent').then(function(){setDownloading(null);});
+              },disabled:isDownloading,style:{background:'none',border:'none',padding:0,display:'inline-flex',alignItems:'center',gap:4,color:T.navy,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:isDownloading?'wait':'pointer',opacity:isDownloading?0.6:1}},
+                isDownloading?'Downloading…':[Icons.download(),' Download']):null);
+          })),
+        faculty.documents.reappointment.status!=='submitted'&&faculty.documents.reappointment.link?
+          h('a',{href:faculty.documents.reappointment.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Submit Documents →')
+        :null),
       h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📋 Syllabus Submission'),
