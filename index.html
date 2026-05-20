@@ -97,6 +97,7 @@ var MOCK = {
     contract:{status:'pending',date:'',fileName:'Contract.pdf',hasFile:false,link:null},
     reappointment:{applicable:false},
   },
+  housing:{applicable:false},
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -112,6 +113,7 @@ function loadPortalData(token){
       notices:(nx.success&&nx.notices)?nx.notices:[],
       documents: dash.documents || MOCK.documents,
       courses: dash.courses || MOCK.courses,
+      housing: dash.housing || MOCK.housing,
     });
   });
 }
@@ -388,7 +390,15 @@ function App(){
           })),
         faculty.documents.reappointment.status!=='submitted'&&faculty.documents.reappointment.link?
           h('a',{href:faculty.documents.reappointment.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Submit Documents →')
-        :null)
+        :null),
+      faculty.housing&&faculty.housing.applicable&&h(Card,null,
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8,flexWrap:'wrap'}},
+          h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'🏠 Stay at Somerset Palace'),
+          h('span',{style:{fontSize:11,fontWeight:700,color:T.navy,background:'rgba(0,55,100,.08)',padding:'3px 8px',borderRadius:4}},faculty.housing.program)),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8,fontSize:13,color:T.sub}},
+          h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-in: '),faculty.housing.checkin||'—'),
+          h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-out: '),faculty.housing.checkout||'—'),
+          faculty.housing.guests&&h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Guests/Bed: '),faculty.housing.guests)))
     );
   }
 
