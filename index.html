@@ -136,9 +136,10 @@ function Badge(props){
 function App(){
   var initialScreen = (typeof sessionStorage!=='undefined' && sessionStorage.getItem('portal_token')) ? 'restoring' : 'login';
   var _s=useState(initialScreen),screen=_s[0],setScreen=_s[1];
-  var _e=useState(''),email=_e[0],setEmail=_e[1];
+  var _e=useState(''),employeeId=_e[0],setEmployeeId=_e[1];
   var _d=useState(''),dob=_d[0],setDob=_d[1];
   var _o=useState(''),otp=_o[0],setOtp=_o[1];
+  var _ec=useState(0),emailCount=_ec[0],setEmailCount=_ec[1];
   var _l=useState(false),loading=_l[0],setLoading=_l[1];
   var _er=useState(''),error=_er[0],setError=_er[1];
   var _t=useState('dashboard'),tab=_t[0],setTab=_t[1];
@@ -159,13 +160,14 @@ function App(){
     });
   },[]);
 
-  function handleEmailLogin(){
-    if(!email.includes('@')){setError('Please enter a valid email address.');return;}
+  function handleLogin(){
+    var eid = employeeId.trim().toUpperCase();
+    if(!eid){setError('Please enter your Employee ID.');return;}
     if(!dob){setError('Please enter your date of birth.');return;}
     setLoading(true);setError('');
-    callApi('verifyIdentity',{email:email,birthDate:dob}).then(function(res){
+    callApi('verifyIdentity',{employeeId:eid,birthDate:dob}).then(function(res){
       setLoading(false);
-      if(res.success){setScreen('otp');setOtp('');}
+      if(res.success){setScreen('otp');setOtp('');setEmailCount(res.emailCount||1);}
       else{setError(res.message||'Verification failed.');}
     }).catch(function(){
       setLoading(false);setError('Network error. Please try again.');
@@ -173,8 +175,9 @@ function App(){
   }
   function handleOtpVerify(){
     if(otp.length!==6){setError('Please enter the 6-digit code.');return;}
+    var eid = employeeId.trim().toUpperCase();
     setLoading(true);setError('');
-    callApi('verifyOtp',{email:email,otp:otp}).then(function(res){
+    callApi('verifyOtp',{employeeId:eid,otp:otp}).then(function(res){
       if(!(res.success&&res.token)){
         setLoading(false);setError(res.message||'Verification failed.');return;
       }
@@ -190,7 +193,7 @@ function App(){
   }
   function handleLogout(){
     sessionStorage.removeItem('portal_token');
-    setScreen('login');setFaculty(null);setEmail('');setDob('');setOtp('');setError('');setTab('dashboard');setSelNotice(null);
+    setScreen('login');setFaculty(null);setEmployeeId('');setDob('');setOtp('');setError('');setEmailCount(0);setTab('dashboard');setSelNotice(null);
   }
 
   // ── Styles ──
@@ -219,17 +222,17 @@ function App(){
         ),
         h('div',{style:{background:'#fff',borderRadius:16,padding:'32px 28px',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}},
           h('div',{style:{marginBottom:14}},
-            h('label',{style:{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:6}},'Email Address'),
-            h('input',{type:'email',value:email,onChange:function(e){setEmail(e.target.value)},placeholder:'your.email@university.edu',style:inputStyle()})
+            h('label',{style:{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:6}},'Employee ID (교번)'),
+            h('input',{type:'text',value:employeeId,onChange:function(e){setEmployeeId(e.target.value)},placeholder:'Z0000000',autoCapitalize:'characters',autoCorrect:'off',spellCheck:false,style:S(inputStyle(),{letterSpacing:1,fontFamily:"'Noto Sans',monospace"})})
           ),
           h('div',{style:{marginBottom:20}},
             h('label',{style:{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:6}},'Date of Birth'),
             h('input',{type:'date',value:dob,onChange:function(e){setDob(e.target.value)},style:inputStyle()})
           ),
           error&&h('p',{style:{fontSize:13,color:T.red,margin:'0 0 14px',padding:'8px 12px',background:'#fef2f2',borderRadius:8}},error),
-          h('button',{onClick:handleEmailLogin,disabled:loading,style:S(btnPrimary,{opacity:loading?.7:1})},loading?'Verifying...':'Send Verification Code'),
+          h('button',{onClick:handleLogin,disabled:loading,style:S(btnPrimary,{opacity:loading?.7:1})},loading?'Verifying...':'Send Verification Code'),
           h('p',{style:{fontSize:11,color:T.sub,textAlign:'center',margin:'16px 0 0',lineHeight:1.5,display:'flex',alignItems:'center',justifyContent:'center',gap:4}},
-            Icons.shield(),' A 6-digit verification code will be sent to your email')
+            Icons.shield(),' A 6-digit code will be sent to your registered email(s)')
         ),
         h('p',{style:{textAlign:'center',fontSize:11,color:'rgba(255,255,255,.4)',marginTop:20}},'Office of International Affairs, Yonsei University')
       )
@@ -244,7 +247,10 @@ function App(){
         h('div',{style:{textAlign:'center',marginBottom:32,color:'#fff'}},
           h('div',{style:{width:64,height:64,background:'rgba(255,255,255,.12)',borderRadius:16,display:'inline-flex',alignItems:'center',justifyContent:'center',marginBottom:16,color:'#fff'}},Icons.mail()),
           h('h2',{style:{fontSize:22,margin:'0 0 6px',fontFamily:"'Playfair Display',serif"}},'Check Your Email'),
-          h('p',{style:{color:'rgba(255,255,255,.6)',fontSize:13,margin:0}},'We sent a code to ',h('strong',{style:{color:'rgba(255,255,255,.85)'}},email))
+          h('p',{style:{color:'rgba(255,255,255,.6)',fontSize:13,margin:0}},
+            emailCount>1
+              ? ['We sent a code to ',h('strong',{style:{color:'rgba(255,255,255,.85)'}},'all '+emailCount+' of your registered emails')]
+              : ['We sent a code to your registered email'])
         ),
         h('div',{style:{background:'#fff',borderRadius:16,padding:'32px 28px',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}},
           h('div',{style:{marginBottom:20}},
