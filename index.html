@@ -90,13 +90,12 @@ var Icons = {
 // ── Mock Data (fallback for unconnected fields) ──
 var MOCK = {
   courses:[
-    {code:'GLC3146',title:'Korean Pop Culture and Visual Art',period:'6-week',schedule:'Mon/Wed 10:00-11:50',room:'Samsung Hall 401',students:45,syllabusUploaded:true},
-    {code:'GLC2138',title:'Introduction to Korean Studies',period:'6-week',schedule:'Tue/Thu 14:00-15:50',room:'Daewoo Hall 201',students:38,syllabusUploaded:false},
+    {code:'GLC3146',title:'Korean Pop Culture and Visual Art',session:'1st',period:'6-week',days:'Mon/Wed',time:'10:00-11:50',location:'Samsung Hall 401',syllabusLink:null},
+    {code:'GLC2138',title:'Introduction to Korean Studies',session:'2nd',period:'6-week',days:'Tue/Thu',time:'14:00-15:50',location:'Daewoo Hall 201',syllabusLink:null},
   ],
   documents:{
-    contract:{status:'pending',date:'',fileName:'Contract.pdf',link:null,downloadUrl:null},
+    contract:{status:'pending',date:'',fileName:'Contract.pdf',hasFile:false,link:null},
     reappointment:{applicable:false},
-    syllabus:{status:'pending',submitted:0,total:0,courses:[]},
   },
 };
 
@@ -109,14 +108,10 @@ function loadPortalData(token){
     var dash=results[0], nx=results[1];
     if(dash.expired||nx.expired) return null;
     if(!dash.success) return null;
-    var docs = dash.documents || MOCK.documents;
-    var courses = (docs.syllabus && docs.syllabus.courses) ? docs.syllabus.courses.map(function(c){
-      return { code:c.code, title:c.title, syllabusUploaded:c.status==='submitted', link:c.link };
-    }) : MOCK.courses;
     return Object.assign({},MOCK,dash.faculty,{
       notices:(nx.success&&nx.notices)?nx.notices:[],
-      documents: docs,
-      courses: courses,
+      documents: dash.documents || MOCK.documents,
+      courses: dash.courses || MOCK.courses,
     });
   });
 }
@@ -282,7 +277,7 @@ function App(){
         h('p',{style:{fontSize:12,opacity:.6,margin:'4px 0 0'}},'Faculty ID: '+faculty.employeeId)
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12}},
-        [{l:'Courses',v:faculty.courses.length,c:T.navy},{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Syllabus',v:faculty.documents.syllabus.submitted+'/'+faculty.documents.syllabus.total,c:faculty.documents.syllabus.status==='submitted'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].map(function(s,i){
+        [{l:'Courses',v:faculty.courses.length,c:T.navy},{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].map(function(s,i){
           return h(Card,{key:i,style:{textAlign:'center',padding:'18px 12px'}},
             h('div',{style:{fontSize:24,fontWeight:700,color:s.c}},s.v),
             h('div',{style:{fontSize:12,color:T.sub,marginTop:2}},s.l));
@@ -298,9 +293,6 @@ function App(){
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
             actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
-          faculty.courses.filter(function(c){return!c.syllabusUploaded}).forEach(function(c){
-            actions.push({key:'syl-'+c.code,label:'Submit syllabus for '+c.code+' '+c.title,link:c.link});
-          });
           if(actions.length===0){
             return h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
               h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
@@ -332,16 +324,24 @@ function App(){
       faculty.courses.length===0?
         h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'No courses assigned yet.'))
       :faculty.courses.map(function(c,i){
+        var meta=[
+          c.session && ['Session', c.session],
+          c.period && ['Period', c.period],
+          c.days && ['Days', c.days],
+          c.time && ['Time', c.time],
+          c.location && ['Location', c.location],
+        ].filter(Boolean);
         return h(Card,{key:i},
-          h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}},
-            h('div',null,
-              h('span',{style:{fontSize:11,fontWeight:700,color:T.navy,background:'rgba(0,55,100,.08)',padding:'3px 8px',borderRadius:4}},c.code),
-              h('h3',{style:{fontSize:16,fontWeight:700,color:T.text,margin:'8px 0 0'}},c.title))),
-          h('div',{style:{fontSize:13,color:T.sub,marginBottom:16}},
-            '📄 Syllabus: ',c.syllabusUploaded?h('span',{style:{color:T.green,fontWeight:600}},'Submitted'):h('span',{style:{color:T.amber,fontWeight:600}},'Not submitted')),
-          c.link?
-            h('a',{href:c.link,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-block',padding:'8px 16px',background:c.syllabusUploaded?'rgba(0,55,100,.06)':T.navy,color:c.syllabusUploaded?T.navy:'#fff',textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600}},c.syllabusUploaded?'Edit Syllabus →':'Submit Syllabus →')
-          :null
+          h('div',{style:{marginBottom:12}},
+            h('span',{style:{fontSize:11,fontWeight:700,color:T.navy,background:'rgba(0,55,100,.08)',padding:'3px 8px',borderRadius:4}},c.code),
+            h('h3',{style:{fontSize:16,fontWeight:700,color:T.text,margin:'8px 0 0'}},c.title)),
+          meta.length>0 && h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8,marginBottom:14,fontSize:12,color:T.sub}},
+            meta.map(function(m,j){
+              return h('div',{key:j},h('strong',{style:{color:T.text,fontWeight:600}},m[0]+': '),m[1]);
+            })),
+          c.syllabusLink?
+            h('a',{href:c.syllabusLink,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600,width:'fit-content'}},Icons.download(),' View Syllabus')
+          :h('span',{style:{fontSize:12,color:T.sub,fontStyle:'italic'}},'Syllabus not yet available')
         );
       })
     );
@@ -388,25 +388,7 @@ function App(){
           })),
         faculty.documents.reappointment.status!=='submitted'&&faculty.documents.reappointment.link?
           h('a',{href:faculty.documents.reappointment.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Submit Documents →')
-        :null),
-      h(Card,null,
-        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
-          h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📋 Syllabus Submission'),
-          Badge({status:faculty.documents.syllabus.status})),
-        faculty.documents.syllabus.total===0?
-          h('p',{style:{fontSize:13,color:T.sub,margin:0}},'No syllabi assigned')
-        :h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
-            h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 4px'}},faculty.documents.syllabus.submitted+' of '+faculty.documents.syllabus.total+' syllabi submitted'),
-            faculty.documents.syllabus.courses.map(function(c,i){
-              var submitted=c.status==='submitted';
-              return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:submitted?T.greenL:T.amberL,borderRadius:8,gap:10}},
-                h('div',{style:{display:'flex',flexDirection:'column',gap:2,minWidth:0,flex:1}},
-                  h('div',{style:{fontSize:13,fontWeight:600,color:T.text}},c.code+' · '+c.title),
-                  h('div',{style:{fontSize:12,color:T.sub}},submitted?('Submitted '+c.submittedAt):'Awaiting submission')),
-                c.link?
-                  h('a',{href:c.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'6px 12px',background:submitted?'rgba(0,55,100,.06)':T.navy,color:submitted?T.navy:'#fff',textDecoration:'none',borderRadius:6,fontSize:12,fontWeight:600,whiteSpace:'nowrap'}},submitted?'Edit →':'Submit →')
-                :null);
-            })))
+        :null)
     );
   }
 
