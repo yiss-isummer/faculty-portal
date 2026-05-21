@@ -156,7 +156,7 @@ function App(){
     if(initialScreen!=='restoring') return;
     var token=sessionStorage.getItem('portal_token');
     loadPortalData(token).then(function(data){
-      if(data){setFaculty(data);setScreen('portal');}
+      if(data){setFaculty(data);if(data.isAdmin)setTab('admin');setScreen('portal');}
       else{sessionStorage.removeItem('portal_token');setScreen('login');}
     }).catch(function(){
       // 네트워크 에러: 토큰 보존하고 로그인 화면으로 (다음 시도에서 복원 재시도 가능)
@@ -188,7 +188,7 @@ function App(){
       sessionStorage.setItem('portal_token',res.token);
       return loadPortalData(res.token).then(function(data){
         setLoading(false);
-        if(data){setFaculty(data);setScreen('portal');}
+        if(data){setFaculty(data);if(data.isAdmin)setTab('admin');setScreen('portal');}
         else{sessionStorage.removeItem('portal_token');setError('Failed to load portal data.');}
       });
     }).catch(function(){
@@ -274,13 +274,17 @@ function App(){
   }
 
   // ── PORTAL ──
-  var tabs=[
-    {key:'dashboard',label:'Dashboard',icon:Icons.dashboard},
-    {key:'courses',label:'My Courses',icon:Icons.courses},
-    {key:'documents',label:'Documents',icon:Icons.documents},
-    {key:'notices',label:'Notices',icon:Icons.notices},
-  ];
-  if(faculty.isAdmin===true) tabs.push({key:'admin',label:'Admin',icon:Icons.admin});
+  var tabs = faculty.isAdmin===true
+    ? [
+        {key:'admin',label:'Admin',icon:Icons.admin},
+        {key:'notices',label:'Notices',icon:Icons.notices},
+      ]
+    : [
+        {key:'dashboard',label:'Dashboard',icon:Icons.dashboard},
+        {key:'courses',label:'My Courses',icon:Icons.courses},
+        {key:'documents',label:'Documents',icon:Icons.documents},
+        {key:'notices',label:'Notices',icon:Icons.notices},
+      ];
 
   function DashboardTab(){
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
