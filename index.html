@@ -88,6 +88,7 @@ var Icons = {
   shield: function(){return Ico({d:['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],w:14,h:14})},
   admin: function(){return Ico({d:[{t:'path',d:'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2'},{t:'circle',cx:'9',cy:'7',r:'4'},{t:'path',d:'M23 21v-2a4 4 0 00-3-3.87'},{t:'path',d:'M16 3.13a4 4 0 010 7.75'}]})},
   send: function(){return Ico({d:[{t:'line',x1:'22',y1:'2',x2:'11',y2:'13'},{t:'polygon',points:'22 2 15 22 11 13 2 9 22 2'}],w:14,h:14})},
+  salary: function(){return Ico({d:[{t:'rect',x:'2',y:'5',width:'20',height:'14',rx:'2'},{t:'line',x1:'2',y1:'10',x2:'22',y2:'10'},{t:'line',x1:'6',y1:'15',x2:'10',y2:'15'}]})},
 };
 // ── Mock Data (fallback for unconnected fields) ──
 var MOCK = {
@@ -101,6 +102,7 @@ var MOCK = {
   },
   housing:{applicable:false},
   resources:[],
+  salary:{submitted:false,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',data:{}},
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -118,6 +120,7 @@ function loadPortalData(token){
       courses: dash.courses || MOCK.courses,
       housing: dash.housing || MOCK.housing,
       resources: dash.resources || MOCK.resources,
+      salary: dash.salary || MOCK.salary,
     });
   });
 }
@@ -283,6 +286,7 @@ function App(){
         {key:'dashboard',label:'Dashboard',icon:Icons.dashboard},
         {key:'courses',label:'My Courses',icon:Icons.courses},
         {key:'documents',label:'Documents',icon:Icons.documents},
+        {key:'salary',label:'Salary',icon:Icons.salary},
         {key:'notices',label:'Notices',icon:Icons.notices},
       ];
 
@@ -579,7 +583,133 @@ function App(){
     );
   }
 
-  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab,admin:AdminTab};
+  function SalaryTab(){
+    var salary = faculty.salary || MOCK.salary;
+    var _f = useState(Object.assign({},salary.data||{})), form = _f[0], setForm = _f[1];
+    var _st = useState({submitted:!!salary.submitted,submittedAt:salary.submittedAt||'',updatedAt:salary.updatedAt||''}), status = _st[0], setStatus = _st[1];
+    var _sv = useState(false), saving = _sv[0], setSaving = _sv[1];
+    var _err = useState(''), formError = _err[0], setFormError = _err[1];
+    var _ok = useState(false), justSaved = _ok[0], setJustSaved = _ok[1];
+
+    function update(field, value){
+      setForm(function(prev){ var n=Object.assign({},prev); n[field]=value; return n; });
+      setJustSaved(false);
+    }
+
+    function submit(){
+      setFormError(''); setJustSaved(false);
+      if(!form.attestation){setFormError('Please confirm item 11 (Attestation).');return;}
+      if(!form.consent){setFormError('Please confirm item 12 (Consent of Personal Information).');return;}
+      setSaving(true);
+      var token = sessionStorage.getItem('portal_token');
+      callApi('saveSalaryDisbursement',{token:token,data:form}).then(function(res){
+        setSaving(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){setFormError(res.message||'Save failed.');return;}
+        setStatus({submitted:true,submittedAt:res.submittedAt||status.submittedAt,updatedAt:res.updatedAt||''});
+        setJustSaved(true);
+      }).catch(function(){
+        setSaving(false); setFormError('Network error. Please try again.');
+      });
+    }
+
+    var labelStyle = {display:'block',fontSize:13,fontWeight:600,color:T.text,marginBottom:6,lineHeight:1.45};
+    var requiredStar = h('span',{style:{color:T.red}},' *');
+
+    function fieldText(opts){
+      return h('div',{style:{marginBottom:14}},
+        h('label',{style:labelStyle},opts.label,opts.required?requiredStar:null),
+        h('input',{type:'text',value:form[opts.field]||'',onChange:function(e){update(opts.field,e.target.value)},placeholder:opts.placeholder||'',disabled:!!opts.locked,style:S(inputStyle(),opts.locked?{background:'#f0f2f5',color:T.sub,cursor:'not-allowed'}:{})})
+      );
+    }
+
+    function fieldYesNo(opts){
+      var val = form[opts.field] || '';
+      function pill(option){
+        var active = val===option;
+        return h('label',{key:option,style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 16px',border:'1.5px solid '+(active?T.navy:T.bdr),borderRadius:8,fontSize:13,cursor:'pointer',background:active?'rgba(0,55,100,.06)':'#fff',color:active?T.navy:T.text,fontWeight:active?600:400,marginRight:8,marginBottom:4}},
+          h('input',{type:'radio',name:opts.field,value:option,checked:active,onChange:function(){update(opts.field,option)},style:{margin:0}}),
+          option
+        );
+      }
+      return h('div',{style:{marginBottom:14}},
+        h('label',{style:labelStyle},opts.label,requiredStar),
+        h('div',null, pill('Yes'), pill('No'))
+      );
+    }
+
+    function fieldCheckbox(opts){
+      return h('label',{style:{display:'flex',alignItems:'flex-start',gap:10,padding:'4px 0',cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:!!form[opts.field],onChange:function(e){update(opts.field,e.target.checked)},style:{marginTop:4}}),
+        h('span',{style:{fontSize:13,lineHeight:1.55,color:T.text,flex:1}},opts.label,opts.required?requiredStar:null)
+      );
+    }
+
+    var sectionHead = function(t){return h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 16px',paddingBottom:10,borderBottom:'1px solid '+T.bdr}},t)};
+
+    return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}},
+        h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
+        status.submitted ? Badge({status:'submitted'}) : Badge({status:'pending'})
+      ),
+      h(Card,{style:{background:'#f8f9fb'}},
+        h('p',{style:{margin:'0 0 8px',fontSize:13,color:T.text}},
+          h('strong',null,'Deadline: '),h('span',{style:{color:T.navy,fontWeight:600}},salary.deadline||'—')),
+        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'Section 2 is only used for Salary Disbursement for ',h('strong',null,salary.yearLabel||'2026 YISS'),'.'),
+        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• If you use a ',h('strong',null,'Korean bank account'),', please fill out ',h('strong',null,'N/A'),' for fields 4–8.'),
+        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• Flight Reimbursement will also be given to this bank account information.'),
+        salary.payment4w && h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• ',h('strong',null,'4-Week Program: '),salary.payment4w),
+        salary.payment6w && h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• ',h('strong',null,'6-Week Program: '),salary.payment6w),
+        h('p',{style:{margin:'10px 0 0',fontSize:12,color:T.sub}},'Questions? Contact ',h('a',{href:'mailto:'+(salary.contactEmail||''),style:{color:T.navy}},salary.contactEmail||'isummer@yonsei.ac.kr'),'.'),
+        status.submitted && status.updatedAt && h('p',{style:{margin:'8px 0 0',fontSize:11,color:T.sub}},'Last updated: ',status.updatedAt)
+      ),
+      h(Card,null,
+        sectionHead('Section 1. Personal Information'),
+        fieldText({label:'1. Full Name of Faculty',field:'fullName',required:true}),
+        fieldText({label:'2. Date of Birth',field:'dateOfBirth',locked:true,placeholder:'YYYY-MM-DD'}),
+        fieldText({label:'3. Passport No. (used to enter Korea) or Alien Registration No.',field:'passportOrArc',required:true}),
+        fieldText({label:'4. Nationality (Passport used to enter Korea)',field:'nationality',required:true}),
+        fieldText({label:'5. Telephone (cell phone) No.',field:'telephone',required:true,placeholder:'e.g., +82-10-1234-5678'}),
+        fieldYesNo({label:'6. Do you have a permanent address in Korea?',field:'permanentAddressKorea'}),
+        fieldYesNo({label:'7. Do you continue to live, or plan to live, in Korea for more than 183 days?',field:'liveOver183Days'}),
+        fieldYesNo({label:'8. Do you have a job that requires you to stay in Korea for more than 183 days continuously?',field:'jobRequiresStay'}),
+        fieldYesNo({label:'9. Are there any family members (spouse, children, etc.) living together with you in Korea?',field:'familyInKorea'}),
+        fieldYesNo({label:'10. Do you have a basis for living in Korea such as business or real estate?',field:'koreanBusinessOrRE'}),
+        h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
+          fieldCheckbox({field:'attestation',required:true,label:'11. I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.'})
+        ),
+        h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
+          h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 10px',lineHeight:1.6}},
+            h('strong',{style:{color:T.text}},'12. Consent of Personal Information'),h('br'),
+            h('strong',null,'12-1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
+            h('strong',null,'12-2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No.',h('br'),h('br'),
+            h('em',null,'※ You have the right to reject the collection and use of personal information, but if you exercise this right you will not be able to be employed at the university.')
+          ),
+          fieldCheckbox({field:'consent',required:true,label:'I consent to the collection and use of my personal information as described above.'})
+        )
+      ),
+      h(Card,null,
+        sectionHead('Section 2. Bank Account Information'),
+        h('p',{style:{fontSize:12,color:T.sub,margin:'-8px 0 14px',lineHeight:1.55,padding:'8px 12px',background:T.amberL,color:T.amber,borderRadius:6}},
+          h('strong',null,'Note: '),'If you use a Korean bank account, please fill out ',h('strong',null,'N/A'),' for fields 4–8.'),
+        fieldText({label:'1. Full Name (Beneficiary Name) used for the bank account',field:'beneficiaryName',required:true}),
+        fieldText({label:'2. Beneficiary (Receiving) Bank Name',field:'bankName',required:true}),
+        fieldText({label:'3. Beneficiary (Receiving) Bank Account No.',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'}),
+        fieldText({label:'4. Receiving Bank Branch Name',field:'branchName',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'5. Beneficiary (Receiving) Bank Address',field:'bankAddress',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'6. Country Location of Beneficiary (Receiving) Bank',field:'country',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'7. Bank Code: ABA No. (9 digits for American account)',field:'abaNo',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'8. SWIFT Code',field:'swiftCode',required:true,placeholder:'N/A for Korean bank'})
+      ),
+      formError && h('div',{style:{padding:'10px 14px',background:'#fef2f2',color:T.red,borderRadius:8,fontSize:13}},formError),
+      justSaved && h('div',{style:{padding:'10px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}},Icons.check(),' Saved successfully.'),
+      h('button',{onClick:submit,disabled:saving,style:S(btnPrimary,{opacity:saving?.7:1,maxWidth:260,alignSelf:'flex-start'})},
+        saving ? 'Saving…' : (status.submitted ? 'Update Submission' : 'Submit')
+      )
+    );
+  }
+
+  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab,admin:AdminTab,salary:SalaryTab};
 
   return h('div',{style:{minHeight:'100vh',background:T.bg,fontFamily:"'Noto Sans',-apple-system,sans-serif"}},
     fadeStyle,
