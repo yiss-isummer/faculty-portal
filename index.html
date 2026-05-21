@@ -86,6 +86,8 @@ var Icons = {
   download: function(){return Ico({d:['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4',{t:'polyline',points:'7 10 12 15 17 10'},{t:'line',x1:'12',y1:'15',x2:'12',y2:'3'}],w:16,h:16})},
   mail: function(){return Ico({d:['M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z',{t:'polyline',points:'22,6 12,13 2,6'}]})},
   shield: function(){return Ico({d:['M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'],w:14,h:14})},
+  admin: function(){return Ico({d:[{t:'path',d:'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2'},{t:'circle',cx:'9',cy:'7',r:'4'},{t:'path',d:'M23 21v-2a4 4 0 00-3-3.87'},{t:'path',d:'M16 3.13a4 4 0 010 7.75'}]})},
+  send: function(){return Ico({d:[{t:'line',x1:'22',y1:'2',x2:'11',y2:'13'},{t:'polygon',points:'22 2 15 22 11 13 2 9 22 2'}],w:14,h:14})},
 };
 // ── Mock Data (fallback for unconnected fields) ──
 var MOCK = {
@@ -98,6 +100,7 @@ var MOCK = {
     reappointment:{applicable:false},
   },
   housing:{applicable:false},
+  resources:[],
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -114,6 +117,7 @@ function loadPortalData(token){
       documents: dash.documents || MOCK.documents,
       courses: dash.courses || MOCK.courses,
       housing: dash.housing || MOCK.housing,
+      resources: dash.resources || MOCK.resources,
     });
   });
 }
@@ -276,6 +280,7 @@ function App(){
     {key:'documents',label:'Documents',icon:Icons.documents},
     {key:'notices',label:'Notices',icon:Icons.notices},
   ];
+  if(faculty.isAdmin===true) tabs.push({key:'admin',label:'Admin',icon:Icons.admin});
 
   function DashboardTab(){
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
@@ -404,7 +409,16 @@ function App(){
         h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8,fontSize:13,color:T.sub}},
           h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-in: '),faculty.housing.checkin||'—'),
           h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-out: '),faculty.housing.checkout||'—'),
-          faculty.housing.guests&&h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Guests/Bed: '),faculty.housing.guests)))
+          faculty.housing.guests&&h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Guests/Bed: '),faculty.housing.guests))),
+      faculty.resources&&faculty.resources.length>0&&h(Card,null,
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 12px'}},'📚 Program Resources'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+          faculty.resources.map(function(r){
+            return h('a',{key:r.key,href:r.url,target:'_blank',rel:'noopener noreferrer',style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:13,color:T.text,textDecoration:'none',fontWeight:500}},
+              h('span',{style:{color:T.navy}},Icons.download()),
+              h('span',{style:{flex:1}},r.title),
+              h('span',{style:{fontSize:12,color:T.navy,fontWeight:600}},'Open →'));
+          })))
     );
   }
 
@@ -433,7 +447,135 @@ function App(){
     );
   }
 
-  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab};
+  function AdminTab(){
+    var _r=useState(null),roster=_r[0],setRoster=_r[1];
+    var _l=useState(true),loadingAdmin=_l[0],setLoadingAdmin=_l[1];
+    var _e=useState(''),adminError=_e[0],setAdminError=_e[1];
+    var _s=useState(false),sending=_s[0],setSending=_s[1];
+
+    function loadRoster(){
+      var token=sessionStorage.getItem('portal_token');
+      setLoadingAdmin(true);setAdminError('');
+      callApi('adminListFaculty',{token:token}).then(function(res){
+        setLoadingAdmin(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){setAdminError(res.message||'Failed to load roster.');return;}
+        setRoster(res.faculty||[]);
+      }).catch(function(){
+        setLoadingAdmin(false);setAdminError('Network error.');
+      });
+    }
+    useEffect(function(){loadRoster();},[]);
+
+    function updateFaculty(eid,updates){
+      var token=sessionStorage.getItem('portal_token');
+      return callApi('adminUpdateFaculty',{token:token,employeeId:eid,updates:updates}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Update failed.');return;}
+        loadRoster();
+      }).catch(function(){alert('Network error.');});
+    }
+
+    function cycleOverride(v){
+      if(v===null||v===undefined) return true;
+      if(v===true) return false;
+      return null;
+    }
+    function ovLabel(v){return v===true?'On':v===false?'Off':'Auto'}
+    function ovStyle(v){
+      var s=v===true?{bg:T.greenL,c:T.green}:v===false?{bg:'#fef2f2',c:T.red}:{bg:'#f0f2f5',c:T.sub};
+      return {background:s.bg,color:s.c,border:'none',padding:'4px 10px',borderRadius:14,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',minWidth:54};
+    }
+
+    function sendAnnouncements(){
+      var pending=(roster||[]).filter(function(f){return !f.announcedAt}).length;
+      if(pending===0){alert('All faculty have already been announced.');return;}
+      if(!confirm('Send 교번 announcement email to '+pending+' faculty member(s)?\n\nAlready-announced people will be skipped. Faculty with multiple emails will receive the announcement at all addresses.')) return;
+      var token=sessionStorage.getItem('portal_token');
+      setSending(true);
+      callApi('announceEmployeeIds',{token:token}).then(function(res){
+        setSending(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Send failed.');return;}
+        var sent=(res.sent||[]).length, failed=(res.failed||[]);
+        var msg='Sent: '+sent+' faculty member(s).';
+        if(failed.length>0) msg+='\nFailed: '+failed.length+'\n  '+failed.map(function(f){return f.employeeId+' ('+f.name+')'}).join('\n  ');
+        alert(msg);
+        loadRoster();
+      }).catch(function(){
+        setSending(false);alert('Network error.');
+      });
+    }
+
+    var pendingCount=(roster||[]).filter(function(f){return !f.announcedAt}).length;
+    var th={textAlign:'left',padding:'10px 12px',fontSize:11,fontWeight:700,color:T.sub,textTransform:'uppercase',letterSpacing:.5,borderBottom:'2px solid '+T.bdr,whiteSpace:'nowrap'};
+    var td={padding:'10px 12px',fontSize:13,color:T.text,borderBottom:'1px solid '+T.bdr,verticalAlign:'middle'};
+
+    return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}},
+        h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Faculty Management'),
+        h('button',{onClick:sendAnnouncements,disabled:sending||loadingAdmin||pendingCount===0,style:{padding:'10px 16px',background:pendingCount===0?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,cursor:(sending||pendingCount===0)?'not-allowed':'pointer',opacity:sending?0.6:1}},
+          Icons.send(),' ',sending?'Sending…':('Send 교번 announcements'+(pendingCount>0?(' ('+pendingCount+')'):''))
+        )
+      ),
+      adminError&&h('p',{style:{fontSize:13,color:T.red,margin:0,padding:'8px 12px',background:'#fef2f2',borderRadius:8}},adminError),
+      loadingAdmin?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'Loading roster…'))
+      :(roster&&roster.length===0)?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'No faculty rows found.'))
+      :h(Card,{style:{padding:0,overflow:'hidden'}},
+        h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch'}},
+          h('table',{style:{borderCollapse:'collapse',width:'100%',minWidth:880}},
+            h('thead',null,
+              h('tr',null,
+                h('th',{style:th},'Name / EID'),
+                h('th',{style:th},'Emails'),
+                h('th',{style:th},'DOB'),
+                h('th',{style:th},'Housing'),
+                h('th',{style:th},'Reappt'),
+                h('th',{style:th},'Announced')
+              )
+            ),
+            h('tbody',null,
+              (roster||[]).map(function(f){
+                return h('tr',{key:f.employeeId},
+                  h('td',{style:td},
+                    h('div',{style:{fontWeight:600}},f.name||'—'),
+                    h('div',{style:{fontSize:11,color:T.sub,marginTop:2,fontFamily:'monospace'}},f.employeeId)
+                  ),
+                  h('td',{style:S(td,{fontSize:12,color:T.sub})},
+                    (f.emails||[]).map(function(em,i){return h('div',{key:i},em);})
+                  ),
+                  h('td',{style:td},
+                    h('input',{type:'date',value:f.dob||'',onChange:function(e){
+                      var v=e.target.value;
+                      if(v && v!==f.dob) updateFaculty(f.employeeId,{dob:v});
+                    },style:{padding:'4px 6px',border:'1px solid '+T.bdr,borderRadius:6,fontSize:12,fontFamily:'inherit'}})
+                  ),
+                  h('td',{style:td},
+                    h('button',{onClick:function(){updateFaculty(f.employeeId,{housingOverride:cycleOverride(f.housingOverride)})},style:ovStyle(f.housingOverride),title:'Auto: use Housing form sheet · On: force show · Off: force hide'},ovLabel(f.housingOverride))
+                  ),
+                  h('td',{style:td},
+                    h('button',{onClick:function(){updateFaculty(f.employeeId,{reappointmentOverride:cycleOverride(f.reappointmentOverride)})},style:ovStyle(f.reappointmentOverride),title:'Auto: use Reappointment sheet · On: force show · Off: force hide'},ovLabel(f.reappointmentOverride))
+                  ),
+                  h('td',{style:S(td,{fontSize:12,color:T.sub,whiteSpace:'nowrap'})},
+                    f.announcedAt
+                      ? [h('span',{key:'c',style:{color:T.green,marginRight:4}},Icons.check()),f.announcedAt]
+                      : h('span',{style:{color:T.sub,fontStyle:'italic'}},'Not yet')
+                  )
+                );
+              })
+            )
+          )
+        )
+      ),
+      h('p',{style:{fontSize:11,color:T.sub,margin:'4px 0 0',lineHeight:1.6}},
+        h('strong',null,'Override states: '),'Auto = use the source sheet (Housing form / Reappointment sheet). On = force-show the card even if the source has no row. Off = hide the card regardless.'
+      )
+    );
+  }
+
+  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab,admin:AdminTab};
 
   return h('div',{style:{minHeight:'100vh',background:T.bg,fontFamily:"'Noto Sans',-apple-system,sans-serif"}},
     fadeStyle,
