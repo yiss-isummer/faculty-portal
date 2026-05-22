@@ -170,9 +170,10 @@ function App(){
   function handleLogin(){
     var eid = employeeId.trim().toUpperCase();
     if(!eid){setError('Please enter your Employee ID.');return;}
-    if(!dob){setError('Please enter your date of birth.');return;}
+    var dobDigits = (dob||'').replace(/\D/g,'');
+    if(dobDigits.length!==6){setError('Please enter your date of birth as YYMMDD (6 digits).');return;}
     setLoading(true);setError('');
-    callApi('verifyIdentity',{employeeId:eid,birthDate:dob}).then(function(res){
+    callApi('verifyIdentity',{employeeId:eid,birthDate:dobDigits}).then(function(res){
       setLoading(false);
       if(res.success){setScreen('otp');setOtp('');setEmailCount(res.emailCount||1);}
       else{setError(res.message||'Verification failed.');}
@@ -233,8 +234,8 @@ function App(){
             h('input',{type:'text',value:employeeId,onChange:function(e){setEmployeeId(e.target.value)},placeholder:'Z0000000',autoCapitalize:'characters',autoCorrect:'off',spellCheck:false,style:S(inputStyle(),{letterSpacing:1,fontFamily:"'Noto Sans',monospace"})})
           ),
           h('div',{style:{marginBottom:20}},
-            h('label',{style:{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:6}},'Date of Birth'),
-            h('input',{type:'date',value:dob,onChange:function(e){setDob(e.target.value)},style:inputStyle()})
+            h('label',{style:{display:'block',fontSize:12,fontWeight:600,color:T.text,marginBottom:6}},'Date of Birth (YYMMDD)'),
+            h('input',{type:'text',value:dob,onChange:function(e){setDob(e.target.value.replace(/\D/g,'').slice(0,6))},placeholder:'YYMMDD',inputMode:'numeric',maxLength:6,autoComplete:'off',style:S(inputStyle(),{letterSpacing:1,fontFamily:"'Noto Sans',monospace"})})
           ),
           error&&h('p',{style:{fontSize:13,color:T.red,margin:'0 0 14px',padding:'8px 12px',background:'#fef2f2',borderRadius:8}},error),
           h('button',{onClick:handleLogin,disabled:loading,style:S(btnPrimary,{opacity:loading?.7:1})},loading?'Verifying...':'Send Verification Code'),
