@@ -102,7 +102,7 @@ var MOCK = {
   },
   housing:{applicable:false},
   resources:[],
-  salary:{submitted:false,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',data:{}},
+  salary:{submitted:false,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -659,10 +659,25 @@ function App(){
 
     var sectionHead = function(t){return h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 16px',paddingBottom:10,borderBottom:'1px solid '+T.bdr}},t)};
 
+    var payments = salary.payments || {courses:[],total:'',hasData:false};
+    var courseLabel = function(i,n){ if(n<=1) return 'Payment Amount'; var ord=['1st','2nd','3rd','4th','5th']; return (ord[i]||((i+1)+'th'))+' Course'; };
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
         status.submitted ? Badge({status:'submitted'}) : Badge({status:'pending'})
+      ),
+      payments.hasData && h(Card,null,
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 12px'}},'💰 Your Payment Amount'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          payments.courses.map(function(p,i){
+            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<payments.courses.length-1||payments.total?'1px solid '+T.bdr:'none',fontSize:14}},
+              h('span',{style:{color:T.text}},courseLabel(i,payments.courses.length)),
+              h('span',{style:{color:T.text,fontWeight:600,fontFamily:'monospace'}},p.amount||'—'));
+          }),
+          payments.total && h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0 0',fontSize:14}},
+            h('span',{style:{color:T.navy,fontWeight:700}},'Total'),
+            h('span',{style:{color:T.navy,fontWeight:700,fontFamily:'monospace'}},payments.total))
+        )
       ),
       h(Card,{style:{background:'#f8f9fb'}},
         h('p',{style:{margin:'0 0 8px',fontSize:13,color:T.text}},
