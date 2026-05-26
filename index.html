@@ -315,15 +315,23 @@ function App(){
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
             actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
+          if(faculty.salary && !faculty.salary.submitted){
+            actions.push({key:'salary',label:'Submit salary disbursement form'+(faculty.salary.deadline?(' (by '+faculty.salary.deadline+')'):''),tab:'salary'});
+          }
           if(actions.length===0){
             return h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
               h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
           }
           return actions.map(function(a){
+            var openBtn = a.link
+              ? h('a',{href:a.link,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:T.navy,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap'}},'Open →')
+              : a.tab
+                ? h('button',{onClick:function(){setTab(a.tab)},style:{background:'none',border:'none',padding:0,fontSize:12,color:T.navy,fontWeight:600,whiteSpace:'nowrap',cursor:'pointer',fontFamily:'inherit'}},'Open →')
+                : null;
             return h('div',{key:a.key,style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.amberL,borderRadius:8,marginBottom:8}},
               h('span',{style:{color:T.amber}},Icons.alert()),
               h('span',{style:{fontSize:13,flex:1}},a.label),
-              a.link?h('a',{href:a.link,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:T.navy,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap'}},'Open →'):null);
+              openBtn);
           });
         })()
       ),
