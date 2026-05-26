@@ -604,6 +604,7 @@ function App(){
     var _ok = useState(false), justSaved = _ok[0], setJustSaved = _ok[1];
 
     function update(field, value){
+      if(status.submitted) return;
       setForm(function(prev){ var n=Object.assign({},prev); n[field]=value; return n; });
       setJustSaved(false);
     }
@@ -627,11 +628,13 @@ function App(){
 
     var labelStyle = {display:'block',fontSize:13,fontWeight:600,color:T.text,marginBottom:6,lineHeight:1.45};
     var requiredStar = h('span',{style:{color:T.red}},' *');
+    var formLocked = !!status.submitted;
 
     function fieldText(opts){
+      var disabled = !!opts.locked || formLocked;
       return h('div',{style:{marginBottom:14}},
         h('label',{style:labelStyle},opts.label,opts.required?requiredStar:null),
-        h('input',{type:'text',value:form[opts.field]||'',onChange:function(e){update(opts.field,e.target.value)},placeholder:opts.placeholder||'',disabled:!!opts.locked,style:S(inputStyle(),opts.locked?{background:'#f0f2f5',color:T.sub,cursor:'not-allowed'}:{})})
+        h('input',{type:'text',value:form[opts.field]||'',onChange:function(e){update(opts.field,e.target.value)},placeholder:opts.placeholder||'',disabled:disabled,style:S(inputStyle(),disabled?{background:'#f0f2f5',color:T.sub,cursor:'not-allowed'}:{})})
       );
     }
 
@@ -639,8 +642,9 @@ function App(){
       var val = form[opts.field] || '';
       function pill(option){
         var active = val===option;
-        return h('label',{key:option,style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 16px',border:'1.5px solid '+(active?T.navy:T.bdr),borderRadius:8,fontSize:13,cursor:'pointer',background:active?'rgba(0,55,100,.06)':'#fff',color:active?T.navy:T.text,fontWeight:active?600:400,marginRight:8,marginBottom:4}},
-          h('input',{type:'radio',name:opts.field,value:option,checked:active,onChange:function(){update(opts.field,option)},style:{margin:0}}),
+        var disabled = formLocked;
+        return h('label',{key:option,style:{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 16px',border:'1.5px solid '+(active?T.navy:T.bdr),borderRadius:8,fontSize:13,cursor:disabled?'not-allowed':'pointer',background:active?'rgba(0,55,100,.06)':'#fff',color:active?T.navy:T.text,fontWeight:active?600:400,marginRight:8,marginBottom:4,opacity:disabled&&!active?0.6:1}},
+          h('input',{type:'radio',name:opts.field,value:option,checked:active,disabled:disabled,onChange:function(){update(opts.field,option)},style:{margin:0}}),
           option
         );
       }
@@ -651,8 +655,8 @@ function App(){
     }
 
     function fieldCheckbox(opts){
-      return h('label',{style:{display:'flex',alignItems:'flex-start',gap:10,padding:'4px 0',cursor:'pointer'}},
-        h('input',{type:'checkbox',checked:!!form[opts.field],onChange:function(e){update(opts.field,e.target.checked)},style:{marginTop:4}}),
+      return h('label',{style:{display:'flex',alignItems:'flex-start',gap:10,padding:'4px 0',cursor:formLocked?'not-allowed':'pointer'}},
+        h('input',{type:'checkbox',checked:!!form[opts.field],disabled:formLocked,onChange:function(e){update(opts.field,e.target.checked)},style:{marginTop:4}}),
         h('span',{style:{fontSize:13,lineHeight:1.55,color:T.text,flex:1}},opts.label,opts.required?requiredStar:null)
       );
     }
@@ -729,10 +733,13 @@ function App(){
         fieldText({label:'8. SWIFT Code',field:'swiftCode',required:true,placeholder:'N/A for Korean bank'})
       ),
       formError && h('div',{style:{padding:'10px 14px',background:'#fef2f2',color:T.red,borderRadius:8,fontSize:13}},formError),
-      justSaved && h('div',{style:{padding:'10px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}},Icons.check(),' Saved successfully.'),
-      h('button',{onClick:submit,disabled:saving,style:S(btnPrimary,{opacity:saving?.7:1,maxWidth:260,alignSelf:'flex-start'})},
-        saving ? 'Saving…' : (status.submitted ? 'Update Submission' : 'Submit')
-      )
+      justSaved && h('div',{style:{padding:'10px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}},Icons.check(),' Submitted successfully.'),
+      formLocked
+        ? h('div',{style:{padding:'12px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,lineHeight:1.55}},
+            h('strong',null,'Form locked. '),'Your submission has been received',status.submittedAt?(' on '+status.submittedAt):'','. To correct any information, please contact ',h('a',{href:'mailto:'+(salary.contactEmail||''),style:{color:T.green,fontWeight:600}},salary.contactEmail||'isummer@yonsei.ac.kr'),'.')
+        : h('button',{onClick:submit,disabled:saving,style:S(btnPrimary,{opacity:saving?.7:1,maxWidth:260,alignSelf:'flex-start'})},
+            saving ? 'Saving…' : 'Submit'
+          )
     );
   }
 
