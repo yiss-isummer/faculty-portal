@@ -472,6 +472,8 @@ function App(){
     var _l=useState(true),loadingAdmin=_l[0],setLoadingAdmin=_l[1];
     var _e=useState(''),adminError=_e[0],setAdminError=_e[1];
     var _s=useState(false),sending=_s[0],setSending=_s[1];
+    var _x=useState(null),exporting=_x[0],setExporting=_x[1]; // eid currently exporting, or 'BULK'
+    var _xr=useState(null),exportReport=_xr[0],setExportReport=_xr[1]; // {exported:[], skipped:[], folderUrl}
 
     function loadRoster(){
       var token=sessionStorage.getItem('portal_token');
@@ -507,6 +509,35 @@ function App(){
       return {background:s.bg,color:s.c,border:'none',padding:'4px 10px',borderRadius:14,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',minWidth:54};
     }
 
+    function exportRemittance(eid){
+      var token=sessionStorage.getItem('portal_token');
+      setExporting(eid);setAdminError('');
+      callApi('adminExportRemittance',{token:token,employeeId:eid}).then(function(res){
+        setExporting(null);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert('Export failed: '+(res.message||'unknown'));return;}
+        if(res.url) window.open(res.url,'_blank','noopener');
+      }).catch(function(){
+        setExporting(null);alert('Network error.');
+      });
+    }
+
+    function exportRemittanceBulk(){
+      var ready=(roster||[]).filter(function(f){return f.salaryStatus==='ready'}).length;
+      if(ready===0){alert('No faculty are ready for export (Currency + Amount must be filled in the Submissions sheet).');return;}
+      if(!confirm('Export remittance forms for '+ready+' ready faculty?\n\nRows missing Currency or Amount will be skipped and listed afterward.')) return;
+      var token=sessionStorage.getItem('portal_token');
+      setExporting('BULK');setAdminError('');setExportReport(null);
+      callApi('adminExportRemittanceBulk',{token:token}).then(function(res){
+        setExporting(null);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert('Bulk export failed: '+(res.message||'unknown'));return;}
+        setExportReport({exported:res.exported||[],skipped:res.skipped||[],folderUrl:res.folderUrl||''});
+      }).catch(function(){
+        setExporting(null);alert('Network error.');
+      });
+    }
+
     function sendAnnouncements(){
       var pending=(roster||[]).filter(function(f){return !f.announcedAt}).length;
       if(pending===0){alert('All faculty have already been announced.');return;}
@@ -531,21 +562,41 @@ function App(){
     var th={textAlign:'left',padding:'10px 12px',fontSize:11,fontWeight:700,color:T.sub,textTransform:'uppercase',letterSpacing:.5,borderBottom:'2px solid '+T.bdr,whiteSpace:'nowrap'};
     var td={padding:'10px 12px',fontSize:13,color:T.text,borderBottom:'1px solid '+T.bdr,verticalAlign:'middle'};
 
+    var readyCount=(roster||[]).filter(function(f){return f.salaryStatus==='ready'}).length;
+    var bulkBusy = exporting==='BULK';
+
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Faculty Management'),
-        h('button',{onClick:sendAnnouncements,disabled:sending||loadingAdmin||pendingCount===0,style:{padding:'10px 16px',background:pendingCount===0?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,cursor:(sending||pendingCount===0)?'not-allowed':'pointer',opacity:sending?0.6:1}},
-          Icons.send(),' ',sending?'Sending…':('Send 교번 announcements'+(pendingCount>0?(' ('+pendingCount+')'):''))
+        h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+          h('button',{onClick:exportRemittanceBulk,disabled:bulkBusy||loadingAdmin||readyCount===0,style:{padding:'10px 16px',background:readyCount===0?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,cursor:(bulkBusy||readyCount===0)?'not-allowed':'pointer',opacity:bulkBusy?0.6:1}},
+            Icons.download(),' ',bulkBusy?'Exporting…':('Export Remittance Forms'+(readyCount>0?(' ('+readyCount+')'):''))
+          ),
+          h('button',{onClick:sendAnnouncements,disabled:sending||loadingAdmin||pendingCount===0,style:{padding:'10px 16px',background:pendingCount===0?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,cursor:(sending||pendingCount===0)?'not-allowed':'pointer',opacity:sending?0.6:1}},
+            Icons.send(),' ',sending?'Sending…':('Send 교번 announcements'+(pendingCount>0?(' ('+pendingCount+')'):''))
+          )
         )
       ),
       adminError&&h('p',{style:{fontSize:13,color:T.red,margin:0,padding:'8px 12px',background:'#fef2f2',borderRadius:8}},adminError),
+      exportReport && h(Card,null,
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},
+          h('h3',{style:{fontSize:14,fontWeight:700,color:T.navy,margin:0}},'Bulk export result'),
+          h('button',{onClick:function(){setExportReport(null)},style:{background:'none',border:'none',color:T.sub,fontSize:18,cursor:'pointer',padding:'0 4px'}},'×')),
+        h('p',{style:{fontSize:13,color:T.text,margin:'0 0 8px'}},
+          h('strong',null,'Exported: '),exportReport.exported.length,' file(s).',
+          exportReport.folderUrl ? [' ',h('a',{key:'a',href:exportReport.folderUrl,target:'_blank',rel:'noopener noreferrer',style:{color:T.navy,fontWeight:600}},'Open output folder →')] : null),
+        exportReport.skipped.length>0 && h('div',{style:{marginTop:6}},
+          h('p',{style:{fontSize:13,color:T.amber,margin:'0 0 4px'}},h('strong',null,'Skipped: '),exportReport.skipped.length,' (missing Currency / Amount or no submission).'),
+          h('div',{style:{maxHeight:160,overflowY:'auto',background:'#f8f9fb',padding:'8px 10px',borderRadius:6,fontSize:12,fontFamily:'monospace',color:T.sub}},
+            exportReport.skipped.map(function(s,i){return h('div',{key:i,style:{padding:'2px 0'}},s.employeeId+' — '+s.reason);})))
+      ),
       loadingAdmin?
         h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'Loading roster…'))
       :(roster&&roster.length===0)?
         h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'No faculty rows found.'))
       :h(Card,{style:{padding:0,overflow:'hidden'}},
         h('div',{style:{overflowX:'auto',WebkitOverflowScrolling:'touch'}},
-          h('table',{style:{borderCollapse:'collapse',width:'100%',minWidth:880}},
+          h('table',{style:{borderCollapse:'collapse',width:'100%',minWidth:1040}},
             h('thead',null,
               h('tr',null,
                 h('th',{style:th},'Name / EID'),
@@ -553,6 +604,7 @@ function App(){
                 h('th',{style:th},'DOB'),
                 h('th',{style:th},'Housing'),
                 h('th',{style:th},'Reappt'),
+                h('th',{style:th},'Salary'),
                 h('th',{style:th},'Announced')
               )
             ),
@@ -578,6 +630,17 @@ function App(){
                   h('td',{style:td},
                     h('button',{onClick:function(){updateFaculty(f.employeeId,{reappointmentOverride:cycleOverride(f.reappointmentOverride)})},style:ovStyle(f.reappointmentOverride),title:'Auto: use Reappointment sheet · On: force show · Off: force hide'},ovLabel(f.reappointmentOverride))
                   ),
+                  h('td',{style:td},(function(){
+                    var st = f.salaryStatus||'none';
+                    if(st==='ready'){
+                      var busy = exporting===f.employeeId;
+                      return h('button',{onClick:function(){exportRemittance(f.employeeId)},disabled:busy||bulkBusy,style:{padding:'4px 10px',borderRadius:14,fontSize:12,fontWeight:600,fontFamily:'inherit',background:T.greenL,color:T.green,border:'none',cursor:busy?'wait':'pointer',whiteSpace:'nowrap',opacity:busy?0.6:1},title:'Generate and download remittance xlsx'},busy?'Exporting…':'Export ↓');
+                    }
+                    if(st==='submitted'){
+                      return h('span',{style:{padding:'4px 10px',borderRadius:14,fontSize:11,fontWeight:600,background:T.amberL,color:T.amber,whiteSpace:'nowrap'},title:'Form submitted — fill Currency + Amount in Submissions sheet to enable export'},'Need $/CCY');
+                    }
+                    return h('span',{style:{padding:'4px 10px',borderRadius:14,fontSize:11,fontWeight:600,background:'#f0f2f5',color:T.sub,whiteSpace:'nowrap'},title:'Faculty has not submitted the salary form yet'},'—');
+                  })()),
                   h('td',{style:S(td,{fontSize:12,color:T.sub,whiteSpace:'nowrap'})},
                     f.announcedAt
                       ? [h('span',{key:'c',style:{color:T.green,marginRight:4}},Icons.check()),f.announcedAt]
@@ -611,8 +674,8 @@ function App(){
 
     function submit(){
       setFormError(''); setJustSaved(false);
-      if(!form.attestation){setFormError('Please confirm item 11 (Attestation).');return;}
-      if(!form.consent){setFormError('Please confirm item 12 (Consent of Personal Information).');return;}
+      if(!form.attestation){setFormError('Please confirm item 15 (Attestation).');return;}
+      if(!form.consent){setFormError('Please confirm item 16 (Consent of Personal Information).');return;}
       setSaving(true);
       var token = sessionStorage.getItem('portal_token');
       callApi('saveSalaryDisbursement',{token:token,data:form}).then(function(res){
@@ -701,19 +764,26 @@ function App(){
         fieldText({label:'3. Passport No. (used to enter Korea) or Alien Registration No.',field:'passportOrArc',required:true}),
         fieldText({label:'4. Nationality (Passport used to enter Korea)',field:'nationality',required:true}),
         fieldText({label:'5. Telephone (cell phone) No.',field:'telephone',required:true,placeholder:'e.g., +82-10-1234-5678'}),
-        fieldYesNo({label:'6. Do you have a permanent address in Korea?',field:'permanentAddressKorea'}),
-        fieldYesNo({label:'7. Do you continue to live, or plan to live, in Korea for more than 183 days?',field:'liveOver183Days'}),
-        fieldYesNo({label:'8. Do you have a job that requires you to stay in Korea for more than 183 days continuously?',field:'jobRequiresStay'}),
-        fieldYesNo({label:'9. Are there any family members (spouse, children, etc.) living together with you in Korea?',field:'familyInKorea'}),
-        fieldYesNo({label:'10. Do you have a basis for living in Korea such as business or real estate?',field:'koreanBusinessOrRE'}),
+        h('div',{style:{margin:'8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+          h('strong',{style:{color:T.text}},'Mailing Address (for remittance form)'),h('br'),
+          'Enter the address where you reside / receive mail. This appears on the bank remittance application as the beneficiary’s address.'),
+        fieldText({label:'6. Street Address',field:'streetAddress',required:true,placeholder:'e.g., 50 Yonsei-ro, Seodaemun-gu'}),
+        fieldText({label:'7. City',field:'city',required:true,placeholder:'e.g., Seoul'}),
+        fieldText({label:'8. Region / State / Province',field:'region',required:true,placeholder:'e.g., Seoul / California / N/A'}),
+        fieldText({label:'9. Country',field:'mailingCountry',required:true,placeholder:'e.g., South Korea'}),
+        fieldYesNo({label:'10. Do you have a permanent address in Korea?',field:'permanentAddressKorea'}),
+        fieldYesNo({label:'11. Do you continue to live, or plan to live, in Korea for more than 183 days?',field:'liveOver183Days'}),
+        fieldYesNo({label:'12. Do you have a job that requires you to stay in Korea for more than 183 days continuously?',field:'jobRequiresStay'}),
+        fieldYesNo({label:'13. Are there any family members (spouse, children, etc.) living together with you in Korea?',field:'familyInKorea'}),
+        fieldYesNo({label:'14. Do you have a basis for living in Korea such as business or real estate?',field:'koreanBusinessOrRE'}),
         h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
-          fieldCheckbox({field:'attestation',required:true,label:'11. I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.'})
+          fieldCheckbox({field:'attestation',required:true,label:'15. I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.'})
         ),
         h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
           h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 10px',lineHeight:1.6}},
-            h('strong',{style:{color:T.text}},'12. Consent of Personal Information'),h('br'),
-            h('strong',null,'12-1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
-            h('strong',null,'12-2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No.',h('br'),h('br'),
+            h('strong',{style:{color:T.text}},'16. Consent of Personal Information'),h('br'),
+            h('strong',null,'16-1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
+            h('strong',null,'16-2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No., Mailing Address.',h('br'),h('br'),
             h('em',null,'※ You have the right to reject the collection and use of personal information, but if you exercise this right you will not be able to be employed at the university.')
           ),
           fieldCheckbox({field:'consent',required:true,label:'I consent to the collection and use of my personal information as described above.'})
