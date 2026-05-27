@@ -409,8 +409,8 @@ function App(){
         :faculty.documents.contract.link?
           h('div',null,
             h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
-              h('a',{href:faculty.documents.contract.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'View & Sign Contract →')),
-            h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'The contract and all related documents have also been sent to your email.'))
+              h('a',{href:faculty.documents.contract.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Sign Contract →')),
+            h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Please review the detailed contract sent to your email before signing.'))
         :null,
         contractDocs.length>0&&h('div',{style:{marginTop:14,paddingTop:14,borderTop:'1px solid '+T.bdr}},
           h('div',{style:{fontSize:12,color:T.sub,fontWeight:600,marginBottom:8}},'Related documents'),
