@@ -310,7 +310,7 @@ function App(){
         (function(){
           var actions=[];
           if(faculty.documents.contract.status!=='signed'){
-            actions.push({key:'contract',label:'Sign your employment contract',link:faculty.documents.contract.link});
+            actions.push({key:'contract',label:'Sign your employment contract — check your email for the signing link and all related documents.',link:faculty.documents.contract.link,tab:'documents'});
           }
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
             actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
@@ -323,10 +323,10 @@ function App(){
               h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
           }
           return actions.map(function(a){
-            var openBtn = a.link
-              ? h('a',{href:a.link,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:T.navy,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap'}},'Open →')
-              : a.tab
-                ? h('button',{onClick:function(){setTab(a.tab)},style:{background:'none',border:'none',padding:0,fontSize:12,color:T.navy,fontWeight:600,whiteSpace:'nowrap',cursor:'pointer',fontFamily:'inherit'}},'Open →')
+            var openBtn = a.tab
+              ? h('button',{onClick:function(){setTab(a.tab)},style:{background:'none',border:'none',padding:0,fontSize:12,color:T.navy,fontWeight:600,whiteSpace:'nowrap',cursor:'pointer',fontFamily:'inherit'}},'Open →')
+              : a.link
+                ? h('a',{href:a.link,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:T.navy,fontWeight:600,textDecoration:'none',whiteSpace:'nowrap'}},'Open →')
                 : null;
             return h('div',{key:a.key,style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.amberL,borderRadius:8,marginBottom:8}},
               h('span',{style:{color:T.amber}},Icons.alert()),
@@ -388,7 +388,7 @@ function App(){
   }
 
   function DocumentsTab(){
-    var contractDocKeys = {invitationLetter:1, welcomeLetter:1, businessRegistration:1};
+    var contractDocKeys = {invitationLetter:1, businessRegistration:1};
     var contractDocs = (faculty.resources||[]).filter(function(r){return contractDocKeys[r.key]});
     var programResources = (faculty.resources||[]).filter(function(r){return !contractDocKeys[r.key]});
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
