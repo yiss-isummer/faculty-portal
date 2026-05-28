@@ -528,8 +528,8 @@ function App(){
         if(res.expired){handleLogout();return;}
         if(!res.success){alert('Export failed: '+(res.message||'unknown'));return;}
         if(res.url) window.open(res.url,'_blank','noopener');
-      }).catch(function(){
-        setExporting(null);alert('Network error.');
+      }).catch(function(err){
+        setExporting(null);alert('Export error: '+(err&&err.message||err||'Network or parse failure'));
       });
     }
 
@@ -544,8 +544,8 @@ function App(){
         if(res.expired){handleLogout();return;}
         if(!res.success){alert('Bulk export failed: '+(res.message||'unknown'));return;}
         setExportReport({exported:res.exported||[],skipped:res.skipped||[],folderUrl:res.folderUrl||''});
-      }).catch(function(){
-        setExporting(null);alert('Network error.');
+      }).catch(function(err){
+        setExporting(null);alert('Bulk export error: '+(err&&err.message||err||'Network or parse failure'));
       });
     }
 
@@ -808,10 +808,12 @@ function App(){
         fieldText({label:'2. Beneficiary (Receiving) Bank Name',field:'bankName',required:true}),
         fieldText({label:'3. Beneficiary (Receiving) Bank Account No.',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'}),
         fieldText({label:'4. Receiving Bank Branch Name',field:'branchName',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'5. Beneficiary (Receiving) Bank Address',field:'bankAddress',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'6. Country Location of Beneficiary (Receiving) Bank',field:'country',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'7. Bank Code: ABA No. (9 digits for American account)',field:'abaNo',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'8. SWIFT Code',field:'swiftCode',required:true,placeholder:'N/A for Korean bank'})
+        fieldText({label:'5. Beneficiary (Receiving) Bank Address — Street Name',field:'bankAddress',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'6. Beneficiary (Receiving) Bank Address — Town Location',field:'bankTownLocation',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'7. Beneficiary (Receiving) Bank Address — Town Name',field:'bankTownName',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'8. Country Location of Beneficiary (Receiving) Bank',field:'country',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'9. Bank Code: ABA No. (9 digits for American account)',field:'abaNo',required:true,placeholder:'N/A for Korean bank'}),
+        fieldText({label:'10. SWIFT Code',field:'swiftCode',required:true,placeholder:'N/A for Korean bank'})
       ),
       formError && h('div',{style:{padding:'10px 14px',background:'#fef2f2',color:T.red,borderRadius:8,fontSize:13}},formError),
       justSaved && h('div',{style:{padding:'10px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}},Icons.check(),' Submitted successfully.'),
