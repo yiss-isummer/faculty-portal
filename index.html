@@ -489,10 +489,19 @@ function App(){
     var _sd=useState(null),salaryDetail=_sd[0],setSalaryDetail=_sd[1];
     var _sdl=useState(false),sdLoading=_sdl[0],setSdLoading=_sdl[1];
     var _sds=useState(false),sdSaving=_sds[0],setSdSaving=_sds[1];
+    var _ann=useState(null),announcing=_ann[0],setAnnouncing=_ann[1]; // eid currently sending individual announce
     var _sso=useState(false),settingsOpen=_sso[0],setSettingsOpen=_sso[1];
     var _ss=useState(null),salarySettings=_ss[0],setSalarySettings=_ss[1];
     var _ssl=useState(false),ssLoading=_ssl[0],setSsLoading=_ssl[1];
     var _sss=useState(false),ssSaving=_sss[0],setSsSaving=_sss[1];
+    var _no=useState(false),noticesOpen=_no[0],setNoticesOpen=_no[1];
+    var _nl=useState(null),noticesList=_nl[0],setNoticesList=_nl[1];
+    var _nn=useState(false),noticesLoading=_nn[0],setNoticesLoading=_nn[1];
+    var _ne=useState(null),editNotice=_ne[0],setEditNotice=_ne[1]; // notice being edited or {new:true}
+    var _lo=useState(false),linksOpen=_lo[0],setLinksOpen=_lo[1];
+    var _ll=useState(null),linksList=_ll[0],setLinksList=_ll[1];
+    var _lld=useState(false),linksLoading=_lld[0],setLinksLoading=_lld[1];
+    var _le=useState(null),editLink=_le[0],setEditLink=_le[1];
 
     function loadRoster(){
       var token=sessionStorage.getItem('portal_token');
@@ -515,17 +524,6 @@ function App(){
         if(!res.success){alert(res.message||'Update failed.');return;}
         loadRoster();
       }).catch(function(){alert('Network error.');});
-    }
-
-    function cycleOverride(v){
-      if(v===null||v===undefined) return true;
-      if(v===true) return false;
-      return null;
-    }
-    function ovLabel(v){return v===true?'On':v===false?'Off':'Auto'}
-    function ovStyle(v){
-      var s=v===true?{bg:T.greenL,c:T.green}:v===false?{bg:'#fef2f2',c:T.red}:{bg:'#f0f2f5',c:T.sub};
-      return {background:s.bg,color:s.c,border:'none',padding:'4px 10px',borderRadius:14,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',minWidth:54};
     }
 
     function exportRemittance(eid){
@@ -608,6 +606,74 @@ function App(){
       );
     }
 
+    // ── Notices ──
+    function loadNotices(){
+      setNoticesLoading(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminListNotices',{token:token}).then(function(res){
+        setNoticesLoading(false);
+        if(res.expired){handleLogout();return;}
+        if(res.success) setNoticesList(res.notices||[]);
+      }).catch(function(){setNoticesLoading(false);});
+    }
+    function toggleNotices(){
+      if(noticesOpen){setNoticesOpen(false);return;}
+      setNoticesOpen(true);
+      if(!noticesList) loadNotices();
+    }
+    function saveNotice(){
+      if(!editNotice||!editNotice.title) return;
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminSaveNotice',{token:token,rowIndex:editNotice.rowIndex||null,notice:editNotice}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        setEditNotice(null);loadNotices();
+      }).catch(function(){alert('Network error.');});
+    }
+    function deleteNotice(ri){
+      if(!confirm('Delete this notice?')) return;
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminDeleteNotice',{token:token,rowIndex:ri}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        loadNotices();
+      }).catch(function(){alert('Network error.');});
+    }
+
+    // ── Links ──
+    function loadLinks(){
+      setLinksLoading(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminListLinks',{token:token}).then(function(res){
+        setLinksLoading(false);
+        if(res.expired){handleLogout();return;}
+        if(res.success) setLinksList(res.links||[]);
+      }).catch(function(){setLinksLoading(false);});
+    }
+    function toggleLinks(){
+      if(linksOpen){setLinksOpen(false);return;}
+      setLinksOpen(true);
+      if(!linksList) loadLinks();
+    }
+    function saveLink(){
+      if(!editLink||!editLink.title) return;
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminSaveLink',{token:token,rowIndex:editLink.rowIndex||null,link:editLink}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        setEditLink(null);loadLinks();
+      }).catch(function(){alert('Network error.');});
+    }
+    function deleteLink(ri){
+      if(!confirm('Delete this link?')) return;
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminDeleteLink',{token:token,rowIndex:ri}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        loadLinks();
+      }).catch(function(){alert('Network error.');});
+    }
+
     function openSalaryDetail(eid){
       if(selEid===eid){setSelEid(null);setSalaryDetail(null);return;}
       setSelEid(eid);setSalaryDetail(null);setSdLoading(true);
@@ -637,6 +703,20 @@ function App(){
         h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},label),
         h('input',{type:'text',value:(salaryDetail&&salaryDetail[key])||'',placeholder:placeholder||'',onChange:function(e){setSalaryDetail(function(prev){var n=Object.assign({},prev);n[key]=e.target.value;return n;})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})})
       );
+    }
+
+    function announceOne(eid){
+      if(!confirm('Send 교번 announcement to this faculty member?')) return;
+      var token=sessionStorage.getItem('portal_token');
+      setAnnouncing(eid);
+      callApi('announceEmployeeIds',{token:token,employeeId:eid}).then(function(res){
+        setAnnouncing(null);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Send failed.');return;}
+        var failed=(res.failed||[]);
+        if(failed.length>0) alert('Failed: '+failed[0].error);
+        loadRoster();
+      }).catch(function(){setAnnouncing(null);alert('Network error.');});
     }
 
     var pendingCount=(roster||[]).filter(function(f){return !f.announcedAt}).length;
@@ -677,6 +757,76 @@ function App(){
           ):null
         )
       ),
+      // ── Notices Management ──
+      h(Card,{style:{padding:0,overflow:'hidden'}},
+        h('div',{onClick:toggleNotices,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',cursor:'pointer',background:noticesOpen?'#f8f9fb':'#fff'}},
+          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'📢 Notices'),
+          h('span',{style:{fontSize:14,color:T.sub,transform:noticesOpen?'rotate(180deg)':'none',transition:'transform .2s'}},'▾')
+        ),
+        noticesOpen&&h('div',{style:{padding:'0 16px 16px'}},
+          noticesLoading?h('p',{style:{fontSize:12,color:T.sub,margin:'8px 0 0'}},'Loading…')
+          :noticesList?h('div',{style:{marginTop:8}},
+            editNotice?h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:'12px',background:'#f8f9fb',borderRadius:8,marginBottom:10}},
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('input',{type:'text',value:editNotice.title||'',placeholder:'Title *',onChange:function(e){setEditNotice(function(p){return Object.assign({},p,{title:e.target.value})})},style:S(inputStyle(),{flex:'2 1 200px',fontSize:12,padding:'6px 10px'})}),
+                h('input',{type:'date',value:editNotice.date||'',onChange:function(e){setEditNotice(function(p){return Object.assign({},p,{date:e.target.value})})},style:S(inputStyle(),{flex:'0 0 140px',fontSize:12,padding:'6px 10px'})}),
+                h('select',{value:editNotice.priority||'low',onChange:function(e){setEditNotice(function(p){return Object.assign({},p,{priority:e.target.value})})},style:S(inputStyle(),{flex:'0 0 80px',fontSize:12,padding:'6px 8px'})},
+                  h('option',{value:'low'},'Low'),h('option',{value:'high'},'High'))
+              ),
+              h('textarea',{value:editNotice.content||'',placeholder:'Content',rows:3,onChange:function(e){setEditNotice(function(p){return Object.assign({},p,{content:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px',resize:'vertical'})}),
+              h('div',{style:{display:'flex',gap:6,justifyContent:'flex-end'}},
+                h('button',{onClick:function(){setEditNotice(null)},style:{padding:'5px 12px',background:'#e5e7eb',color:T.text,border:'none',borderRadius:6,fontSize:12,fontFamily:'inherit',cursor:'pointer'}},'Cancel'),
+                h('button',{onClick:saveNotice,style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer'}},editNotice.rowIndex?'Update':'Add'))
+            ):null,
+            h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:8}},
+              !editNotice&&h('button',{onClick:function(){setEditNotice({title:'',date:new Date().toISOString().slice(0,10),priority:'low',content:''})},style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}},'+  Add Notice')
+            ),
+            (noticesList||[]).map(function(n){
+              return h('div',{key:n.rowIndex,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid '+T.bdr,fontSize:13}},
+                n.priority==='high'&&h('span',{style:{padding:'2px 6px',borderRadius:8,fontSize:10,fontWeight:600,background:'#fef2f2',color:T.red}},'High'),
+                h('span',{style:{flex:1,fontWeight:500,color:T.text}},n.title),
+                h('span',{style:{fontSize:11,color:T.sub,whiteSpace:'nowrap'}},n.date),
+                h('button',{onClick:function(){setEditNotice(Object.assign({},n))},style:{background:'none',border:'none',color:T.navy,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Edit'),
+                h('button',{onClick:function(){deleteNotice(n.rowIndex)},style:{background:'none',border:'none',color:T.red,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Delete')
+              );
+            })
+          ):null
+        )
+      ),
+      // ── Portal Links Management ──
+      h(Card,{style:{padding:0,overflow:'hidden'}},
+        h('div',{onClick:toggleLinks,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',cursor:'pointer',background:linksOpen?'#f8f9fb':'#fff'}},
+          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'🔗 Portal Links'),
+          h('span',{style:{fontSize:14,color:T.sub,transform:linksOpen?'rotate(180deg)':'none',transition:'transform .2s'}},'▾')
+        ),
+        linksOpen&&h('div',{style:{padding:'0 16px 16px'}},
+          linksLoading?h('p',{style:{fontSize:12,color:T.sub,margin:'8px 0 0'}},'Loading…')
+          :linksList?h('div',{style:{marginTop:8}},
+            editLink?h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:'12px',background:'#f8f9fb',borderRadius:8,marginBottom:10}},
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('input',{type:'text',value:editLink.key||'',placeholder:'Key (e.g., handbook)',onChange:function(e){setEditLink(function(p){return Object.assign({},p,{key:e.target.value})})},style:S(inputStyle(),{flex:'1 1 120px',fontSize:12,padding:'6px 10px'})}),
+                h('input',{type:'text',value:editLink.title||'',placeholder:'Title *',onChange:function(e){setEditLink(function(p){return Object.assign({},p,{title:e.target.value})})},style:S(inputStyle(),{flex:'2 1 200px',fontSize:12,padding:'6px 10px'})})
+              ),
+              h('input',{type:'text',value:editLink.url||'',placeholder:'URL (https://...)',onChange:function(e){setEditLink(function(p){return Object.assign({},p,{url:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})}),
+              h('div',{style:{display:'flex',gap:6,justifyContent:'flex-end'}},
+                h('button',{onClick:function(){setEditLink(null)},style:{padding:'5px 12px',background:'#e5e7eb',color:T.text,border:'none',borderRadius:6,fontSize:12,fontFamily:'inherit',cursor:'pointer'}},'Cancel'),
+                h('button',{onClick:saveLink,style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer'}},editLink.rowIndex?'Update':'Add'))
+            ):null,
+            h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:8}},
+              !editLink&&h('button',{onClick:function(){setEditLink({key:'',title:'',url:''})},style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}},'+  Add Link')
+            ),
+            (linksList||[]).map(function(lk){
+              return h('div',{key:lk.rowIndex,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid '+T.bdr,fontSize:13}},
+                h('span',{style:{fontSize:11,color:T.sub,fontFamily:'monospace',minWidth:60}},lk.key||'—'),
+                h('span',{style:{flex:1,fontWeight:500,color:T.text}},lk.title),
+                lk.url&&h('a',{href:lk.url,target:'_blank',rel:'noopener',onClick:function(e){e.stopPropagation()},style:{fontSize:11,color:T.navy,whiteSpace:'nowrap'}},'Open ↗'),
+                h('button',{onClick:function(){setEditLink(Object.assign({},lk))},style:{background:'none',border:'none',color:T.navy,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Edit'),
+                h('button',{onClick:function(){deleteLink(lk.rowIndex)},style:{background:'none',border:'none',color:T.red,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Delete')
+              );
+            })
+          ):null
+        )
+      ),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Faculty Management'),
         h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
@@ -713,8 +863,6 @@ function App(){
                 h('th',{style:th},'Name / EID'),
                 h('th',{style:th},'Emails'),
                 h('th',{style:th},'DOB'),
-                h('th',{style:th},'Housing'),
-                h('th',{style:th},'Reappt'),
                 h('th',{style:th},'Salary'),
                 h('th',{style:th},'Announced')
               )
@@ -736,12 +884,6 @@ function App(){
                       if(v && v!==f.dob) updateFaculty(f.employeeId,{dob:v});
                     },style:{padding:'4px 6px',border:'1px solid '+T.bdr,borderRadius:6,fontSize:12,fontFamily:'inherit'}})
                   ),
-                  h('td',{style:td},
-                    h('button',{onClick:function(){updateFaculty(f.employeeId,{housingOverride:cycleOverride(f.housingOverride)})},style:ovStyle(f.housingOverride),title:'Auto: use Housing form sheet · On: force show · Off: force hide'},ovLabel(f.housingOverride))
-                  ),
-                  h('td',{style:td},
-                    h('button',{onClick:function(){updateFaculty(f.employeeId,{reappointmentOverride:cycleOverride(f.reappointmentOverride)})},style:ovStyle(f.reappointmentOverride),title:'Auto: use Reappointment sheet · On: force show · Off: force hide'},ovLabel(f.reappointmentOverride))
-                  ),
                   h('td',{style:td},(function(){
                     var st = f.salaryStatus||'none';
                     if(st==='ready'){
@@ -756,11 +898,11 @@ function App(){
                   h('td',{style:S(td,{fontSize:12,color:T.sub,whiteSpace:'nowrap'})},
                     f.announcedAt
                       ? [h('span',{key:'c',style:{color:T.green,marginRight:4}},Icons.check()),f.announcedAt]
-                      : h('span',{style:{color:T.sub,fontStyle:'italic'}},'Not yet')
+                      : h('button',{onClick:function(e){e.stopPropagation();announceOne(f.employeeId);},disabled:announcing===f.employeeId||sending,style:{padding:'3px 10px',borderRadius:12,fontSize:11,fontWeight:600,fontFamily:'inherit',background:'rgba(0,55,100,.06)',color:T.navy,border:'none',cursor:(announcing===f.employeeId)?'wait':'pointer',opacity:(announcing===f.employeeId)?0.6:1}},announcing===f.employeeId?'Sending…':'Send')
                   )
                 ),
                 isSelected&&h('tr',{key:f.employeeId+'_detail'},
-                  h('td',{colSpan:7,style:{padding:'12px 16px',background:'#f8f9fb',borderBottom:'2px solid '+T.navy}},
+                  h('td',{colSpan:5,style:{padding:'12px 16px',background:'#f8f9fb',borderBottom:'2px solid '+T.navy}},
                     sdLoading?h('p',{style:{fontSize:12,color:T.sub,margin:0}},'Loading…')
                     :salaryDetail?h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
                       h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}},
@@ -788,9 +930,6 @@ function App(){
           )
         )
       ),
-      h('p',{style:{fontSize:11,color:T.sub,margin:'4px 0 0',lineHeight:1.6}},
-        h('strong',null,'Override states: '),'Auto = use the source sheet (Housing form / Reappointment sheet). On = force-show the card even if the source has no row. Off = hide the card regardless.'
-      )
     );
   }
 
