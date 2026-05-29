@@ -485,6 +485,14 @@ function App(){
     var _s=useState(false),sending=_s[0],setSending=_s[1];
     var _x=useState(null),exporting=_x[0],setExporting=_x[1]; // eid currently exporting, or 'BULK'
     var _xr=useState(null),exportReport=_xr[0],setExportReport=_xr[1]; // {exported:[], skipped:[], folderUrl}
+    var _sel=useState(null),selEid=_sel[0],setSelEid=_sel[1];
+    var _sd=useState(null),salaryDetail=_sd[0],setSalaryDetail=_sd[1];
+    var _sdl=useState(false),sdLoading=_sdl[0],setSdLoading=_sdl[1];
+    var _sds=useState(false),sdSaving=_sds[0],setSdSaving=_sds[1];
+    var _sso=useState(false),settingsOpen=_sso[0],setSettingsOpen=_sso[1];
+    var _ss=useState(null),salarySettings=_ss[0],setSalarySettings=_ss[1];
+    var _ssl=useState(false),ssLoading=_ssl[0],setSsLoading=_ssl[1];
+    var _sss=useState(false),ssSaving=_sss[0],setSsSaving=_sss[1];
 
     function loadRoster(){
       var token=sessionStorage.getItem('portal_token');
@@ -569,14 +577,106 @@ function App(){
       });
     }
 
+    function toggleSettings(){
+      if(settingsOpen){setSettingsOpen(false);return;}
+      setSettingsOpen(true);
+      if(salarySettings) return;
+      setSsLoading(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminGetSalarySettings',{token:token}).then(function(res){
+        setSsLoading(false);
+        if(res.expired){handleLogout();return;}
+        if(res.success) setSalarySettings(res.settings);
+      }).catch(function(){setSsLoading(false);});
+    }
+
+    function saveSettings(){
+      if(!salarySettings) return;
+      setSsSaving(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminUpdateSalarySettings',{token:token,settings:salarySettings}).then(function(res){
+        setSsSaving(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Save failed.');return;}
+      }).catch(function(){setSsSaving(false);alert('Network error.');});
+    }
+
+    function ssField(label,key,placeholder){
+      return h('div',{style:{marginBottom:10}},
+        h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},label),
+        h('input',{type:'text',value:(salarySettings&&salarySettings[key])||'',placeholder:placeholder||'',onChange:function(e){setSalarySettings(function(prev){var n=Object.assign({},prev);n[key]=e.target.value;return n;})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})})
+      );
+    }
+
+    function openSalaryDetail(eid){
+      if(selEid===eid){setSelEid(null);setSalaryDetail(null);return;}
+      setSelEid(eid);setSalaryDetail(null);setSdLoading(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminGetSalaryDetail',{token:token,employeeId:eid}).then(function(res){
+        setSdLoading(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){setSalaryDetail({remitPurpose:'',currency:'',amount:'',notes:'',relationship:'',contactPhone:'',localCurrency:''});return;}
+        setSalaryDetail(res.detail);
+      }).catch(function(){setSdLoading(false);});
+    }
+
+    function saveSalaryDetail(){
+      if(!selEid||!salaryDetail) return;
+      setSdSaving(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminUpdateSalaryAdmin',{token:token,employeeId:selEid,updates:salaryDetail}).then(function(res){
+        setSdSaving(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Save failed.');return;}
+        loadRoster();
+      }).catch(function(){setSdSaving(false);alert('Network error.');});
+    }
+
+    function sdField(label,key,placeholder){
+      return h('div',{style:{flex:'1 1 140px',minWidth:0}},
+        h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},label),
+        h('input',{type:'text',value:(salaryDetail&&salaryDetail[key])||'',placeholder:placeholder||'',onChange:function(e){setSalaryDetail(function(prev){var n=Object.assign({},prev);n[key]=e.target.value;return n;})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})})
+      );
+    }
+
     var pendingCount=(roster||[]).filter(function(f){return !f.announcedAt}).length;
     var th={textAlign:'left',padding:'10px 12px',fontSize:11,fontWeight:700,color:T.sub,textTransform:'uppercase',letterSpacing:.5,borderBottom:'2px solid '+T.bdr,whiteSpace:'nowrap'};
     var td={padding:'10px 12px',fontSize:13,color:T.text,borderBottom:'1px solid '+T.bdr,verticalAlign:'middle'};
 
     var readyCount=(roster||[]).filter(function(f){return f.salaryStatus==='ready'}).length;
+    var submittedCount=(roster||[]).filter(function(f){return f.salaryStatus==='submitted'}).length;
+    var noneCount=(roster||[]).filter(function(f){return f.salaryStatus==='none'}).length;
+    var totalCount=(roster||[]).length;
     var bulkBusy = exporting==='BULK';
 
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
+      roster&&roster.length>0&&h('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}},
+        [{l:'Total',v:totalCount,c:T.navy},{l:'Not Submitted',v:noneCount,c:noneCount>0?T.red:T.sub},{l:'Submitted',v:submittedCount,c:submittedCount>0?T.amber:T.sub},{l:'Ready to Export',v:readyCount,c:readyCount>0?T.green:T.sub}].map(function(s,i){
+          return h(Card,{key:i,style:{textAlign:'center',padding:'14px 8px'}},
+            h('div',{style:{fontSize:22,fontWeight:700,color:s.c}},s.v),
+            h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},s.l));
+        })
+      ),
+      h(Card,{style:{padding:0,overflow:'hidden'}},
+        h('div',{onClick:toggleSettings,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',cursor:'pointer',background:settingsOpen?'#f8f9fb':'#fff'}},
+          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'⚙ Salary Settings'),
+          h('span',{style:{fontSize:14,color:T.sub,transform:settingsOpen?'rotate(180deg)':'none',transition:'transform .2s'}},'▾')
+        ),
+        settingsOpen&&h('div',{style:{padding:'0 16px 16px'}},
+          ssLoading?h('p',{style:{fontSize:12,color:T.sub,margin:'8px 0 0'}},'Loading…')
+          :salarySettings?h('div',null,
+            h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:'0 16px',marginTop:8}},
+              ssField('Deadline','salary_deadline','e.g., 2026-06-12'),
+              ssField('Year Label','salary_year_label','e.g., 2026 YISS'),
+              ssField('Contact Email','salary_contact_email','e.g., isummer@yonsei.ac.kr')
+            ),
+            ssField('4-Week Payment Info','salary_payment_4w',''),
+            ssField('6-Week Payment Info','salary_payment_6w',''),
+            h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:4}},
+              h('button',{onClick:saveSettings,disabled:ssSaving,style:{padding:'6px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:ssSaving?'wait':'pointer',opacity:ssSaving?0.7:1}},ssSaving?'Saving…':'Save Settings'))
+          ):null
+        )
+      ),
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:12}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Faculty Management'),
         h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
@@ -621,7 +721,8 @@ function App(){
             ),
             h('tbody',null,
               (roster||[]).map(function(f){
-                return h('tr',{key:f.employeeId},
+                var isSelected = selEid===f.employeeId;
+                return [h('tr',{key:f.employeeId,onClick:function(){if(f.salaryStatus!=='none')openSalaryDetail(f.employeeId);},style:{cursor:f.salaryStatus!=='none'?'pointer':'default',background:isSelected?'rgba(0,55,100,.04)':'transparent'}},
                   h('td',{style:td},
                     h('div',{style:{fontWeight:600}},f.name||'—'),
                     h('div',{style:{fontSize:11,color:T.sub,marginTop:2,fontFamily:'monospace'}},f.employeeId)
@@ -648,7 +749,7 @@ function App(){
                       return h('button',{onClick:function(){exportRemittance(f.employeeId)},disabled:busy||bulkBusy,style:{padding:'4px 10px',borderRadius:14,fontSize:12,fontWeight:600,fontFamily:'inherit',background:T.greenL,color:T.green,border:'none',cursor:busy?'wait':'pointer',whiteSpace:'nowrap',opacity:busy?0.6:1},title:'Generate and download remittance xlsx'},busy?'Exporting…':'Export ↓');
                     }
                     if(st==='submitted'){
-                      return h('span',{style:{padding:'4px 10px',borderRadius:14,fontSize:11,fontWeight:600,background:T.amberL,color:T.amber,whiteSpace:'nowrap'},title:'Form submitted — fill Currency + Amount in Submissions sheet to enable export'},'Need $/CCY');
+                      return h('span',{style:{padding:'4px 10px',borderRadius:14,fontSize:11,fontWeight:600,background:T.amberL,color:T.amber,whiteSpace:'nowrap'},title:'Form submitted — click row to fill Currency + Amount'},'Need $/CCY');
                     }
                     return h('span',{style:{padding:'4px 10px',borderRadius:14,fontSize:11,fontWeight:600,background:'#f0f2f5',color:T.sub,whiteSpace:'nowrap'},title:'Faculty has not submitted the salary form yet'},'—');
                   })()),
@@ -657,7 +758,31 @@ function App(){
                       ? [h('span',{key:'c',style:{color:T.green,marginRight:4}},Icons.check()),f.announcedAt]
                       : h('span',{style:{color:T.sub,fontStyle:'italic'}},'Not yet')
                   )
-                );
+                ),
+                isSelected&&h('tr',{key:f.employeeId+'_detail'},
+                  h('td',{colSpan:7,style:{padding:'12px 16px',background:'#f8f9fb',borderBottom:'2px solid '+T.navy}},
+                    sdLoading?h('p',{style:{fontSize:12,color:T.sub,margin:0}},'Loading…')
+                    :salaryDetail?h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+                      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}},
+                        h('span',{style:{fontSize:13,fontWeight:700,color:T.navy}},'Salary Admin Fields — '+f.name),
+                        h('div',{style:{display:'flex',gap:6}},
+                          h('button',{onClick:function(e){e.stopPropagation();saveSalaryDetail();},disabled:sdSaving,style:{padding:'5px 14px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:sdSaving?'wait':'pointer',opacity:sdSaving?0.7:1}},sdSaving?'Saving…':'Save'),
+                          h('button',{onClick:function(e){e.stopPropagation();setSelEid(null);setSalaryDetail(null);},style:{padding:'5px 14px',background:'#e5e7eb',color:T.text,border:'none',borderRadius:6,fontSize:12,fontWeight:500,fontFamily:'inherit',cursor:'pointer'}},'Close'))
+                      ),
+                      h('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
+                        sdField('송금 사유 [K43]','remitPurpose','e.g., 2026 국제하계대학 강의료'),
+                        sdField('Currency [K32]','currency','e.g., USD'),
+                        sdField('Amount [AE32]','amount','e.g., 7000'),
+                        sdField('현지 수취통화 [BB32]','localCurrency','e.g., USD')
+                      ),
+                      h('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
+                        sdField('Relationship [BY45]','relationship','e.g., Self'),
+                        sdField('담당자 번호 [CB14]','contactPhone','e.g., 02-2123-xxxx'),
+                        sdField('Notes [BP61]','notes','')
+                      )
+                    ):null
+                  )
+                )];
               })
             )
           )
