@@ -269,7 +269,16 @@ function App(){
           h('button',{onClick:handleOtpVerify,disabled:loading||otp.length<6,style:S(btnPrimary,{opacity:(loading||otp.length<6)?.6:1})},loading?'Verifying...':'Sign In'),
           h('div',{style:{display:'flex',justifyContent:'space-between',marginTop:16}},
             h('button',{onClick:function(){setScreen('login');setError('');},style:{background:'none',border:'none',color:T.navy,fontSize:13,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}},'← Back'),
-            h('button',{style:{background:'none',border:'none',color:T.sub,fontSize:13,cursor:'pointer',fontFamily:'inherit'}},'Resend code')
+            h('button',{onClick:function(){
+              setError('');setLoading(true);
+              var eid=employeeId.trim().toUpperCase();
+              var dobDigits=(dob||'').replace(/\D/g,'');
+              callApi('verifyIdentity',{employeeId:eid,birthDate:dobDigits}).then(function(res){
+                setLoading(false);
+                if(res.success){setOtp('');alert('A new code has been sent to your email'+(res.emailCount>1?'s':'')+'.');}
+                else{setError(res.message||'Failed to resend code.');}
+              }).catch(function(){setLoading(false);setError('Network error.');});
+            },disabled:loading,style:{background:'none',border:'none',color:T.sub,fontSize:13,cursor:loading?'wait':'pointer',fontFamily:'inherit'}},'Resend code')
           )
         ),
         h('p',{style:{textAlign:'center',fontSize:11,color:'rgba(255,255,255,.35)',marginTop:16}},'Code expires in 5 minutes')
@@ -425,9 +434,9 @@ function App(){
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📄 Reappointment Documents'),
           Badge({status:faculty.documents.reappointment.status})),
-        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.reappointment.files.length===0?'No documents submitted yet':('Last submitted on '+faculty.documents.reappointment.date)),
-        faculty.documents.reappointment.files.length>0&&h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}},
-          faculty.documents.reappointment.files.map(function(f,i){
+        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},(faculty.documents.reappointment.files||[]).length===0?'No documents submitted yet':('Last submitted on '+faculty.documents.reappointment.date)),
+        (faculty.documents.reappointment.files||[]).length>0&&h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}},
+          (faculty.documents.reappointment.files||[]).map(function(f,i){
             var canDownload = (f==='Consent Form') && faculty.documents.reappointment.consentAvailable;
             var isDownloading = downloading==='consent';
             return h('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'#f8f9fb',borderRadius:8,gap:10}},
@@ -878,7 +887,7 @@ function App(){
                   h('td',{style:S(td,{fontSize:12,color:T.sub})},
                     (f.emails||[]).map(function(em,i){return h('div',{key:i},em);})
                   ),
-                  h('td',{style:td},
+                  h('td',{style:td,onClick:function(e){e.stopPropagation();}},
                     h('input',{type:'date',value:f.dob||'',onChange:function(e){
                       var v=e.target.value;
                       if(v && v!==f.dob) updateFaculty(f.employeeId,{dob:v});
