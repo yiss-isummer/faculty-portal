@@ -1029,11 +1029,27 @@ function App(){
             h('span',{style:{color:T.navy,fontWeight:700,fontFamily:'monospace'}},payments.total))
         )
       );
-    // 검수6: 국내(전임)은 강의료 금액만 표시. 은행정보 입력폼·제출 안내(Deadline/추가지급표) 숨김.
+    // 수강인원별 추가지급 안내 (강의료 관련 — 전임 포함 모든 교원에게 표시).
+    var enrollmentCard = h(Card,null,
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'📊 수강인원별 추가지급'),
+        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'Additional Payment by Course Enrollment'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          [['40명 이상 ~ 60명 미만','KRW 500,000 추가지급'],
+           ['60명 이상 ~ 80명 미만','KRW 1,000,000 추가지급 · 수업 전담 조교 지원'],
+           ['80명 이상 ~ 100명 미만','KRW 1,500,000 추가지급 · 수업 전담 조교 지원'],
+           ['100명 이상','KRW 2,000,000 추가지급 · 수업 전담 조교 지원']].map(function(r,i){
+            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,padding:'8px 0',borderBottom:i<3?'1px solid '+T.bdr:'none',fontSize:13}},
+              h('span',{style:{color:T.text,fontWeight:600,whiteSpace:'nowrap'}},r[0]),
+              h('span',{style:{color:T.text,textAlign:'right',lineHeight:1.5}},r[1]));
+          })
+        )
+      );
+    // 검수6: 국내(전임)은 은행정보 입력폼·Deadline 숨김. 단 강의료 금액·추가지급 안내는 표시.
     if(isFT){
       return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
         paymentCard,
+        enrollmentCard,
         h(Card,{style:{background:'#f8f9fb'}},
           h('p',{style:{margin:0,fontSize:13,color:T.sub,lineHeight:1.6}},'Bank account information submission is not required for domestic full-time faculty.'))
       );
@@ -1055,20 +1071,7 @@ function App(){
         h('p',{style:{margin:'10px 0 0',fontSize:12,color:T.sub}},'Questions? Contact ',h('a',{href:'mailto:'+(salary.contactEmail||''),style:{color:T.navy}},salary.contactEmail||'isummer@yonsei.ac.kr'),'.'),
         status.submitted && status.updatedAt && h('p',{style:{margin:'8px 0 0',fontSize:11,color:T.sub}},'Last updated: ',status.updatedAt)
       ),
-      h(Card,null,
-        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'📊 수강인원별 추가지급'),
-        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'Additional Payment by Course Enrollment'),
-        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
-          [['40–60명','KRW 500,000'],
-           ['60–80명','KRW 1,000,000 + 조교(TA)'],
-           ['80–100명','KRW 1,500,000 + 조교(TA)'],
-           ['100명+','KRW 2,000,000 + 조교(TA)']].map(function(r,i){
-            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<3?'1px solid '+T.bdr:'none',fontSize:13}},
-              h('span',{style:{color:T.text,fontWeight:600}},r[0]),
-              h('span',{style:{color:T.text,fontFamily:'monospace'}},r[1]));
-          })
-        )
-      ),
+      enrollmentCard,
       h(Card,null,
         sectionHead('Section 1. Personal Information'),
         fieldText({label:'1. Full Name of Faculty',field:'fullName',required:true}),
