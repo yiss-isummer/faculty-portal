@@ -287,6 +287,8 @@ function App(){
   }
 
   // ── PORTAL ──
+  // 교원 분류 (G2): 'DOMESTIC_FT' = 국내(전임). 해외/국내(외부)는 기존 동작.
+  var isFT = faculty.category==='DOMESTIC_FT';
   var tabs = faculty.isAdmin===true
     ? [
         {key:'admin',label:'Admin',icon:Icons.admin},
@@ -298,7 +300,7 @@ function App(){
         {key:'documents',label:'Documents',icon:Icons.documents},
         {key:'salary',label:'Salary',icon:Icons.salary},
         {key:'notices',label:'Notices',icon:Icons.notices},
-      ];
+      ].filter(function(t){ return !(isFT && t.key==='documents'); });  // 검수5: 전임은 Documents 숨김
 
   function DashboardTab(){
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
@@ -308,7 +310,7 @@ function App(){
         h('p',{style:{fontSize:12,opacity:.6,margin:'4px 0 0'}},'Faculty ID: '+faculty.employeeId)
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12}},
-        [{l:'Courses',v:faculty.courses.length,c:T.navy},{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].map(function(s,i){
+        [{l:'Courses',v:faculty.courses.length,c:T.navy},!isFT&&{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].filter(Boolean).map(function(s,i){
           return h(Card,{key:i,style:{textAlign:'center',padding:'18px 12px'}},
             h('div',{style:{fontSize:24,fontWeight:700,color:s.c}},s.v),
             h('div',{style:{fontSize:12,color:T.sub,marginTop:2}},s.l));
@@ -318,7 +320,7 @@ function App(){
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 14px'}},'Action Required'),
         (function(){
           var actions=[];
-          if(faculty.documents.contract.status!=='signed'){
+          if(!isFT && faculty.documents.contract.status!=='signed'){
             actions.push({key:'contract',label:'Sign your employment contract — check your email for the signing link and all related documents.',link:faculty.documents.contract.link,tab:'documents'});
           }
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
@@ -351,7 +353,8 @@ function App(){
         h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:8,fontSize:13,color:T.sub}},
           h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-in: '),faculty.housing.checkin||'—'),
           h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Check-out: '),faculty.housing.checkout||'—'),
-          faculty.housing.guests&&h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Guests/Bed: '),faculty.housing.guests))),
+          faculty.housing.guests&&h('div',null,h('strong',{style:{color:T.text,fontWeight:600}},'Guests/Bed: '),faculty.housing.guests)),
+        h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'12px 0 0',lineHeight:1.5}},'*If you wish to change your accommodation or have a question, please contact ',h('a',{href:'mailto:isummer@yonsei.ac.kr',style:{color:T.navy}},'isummer@yonsei.ac.kr'),' / ',h('a',{href:'mailto:christine.park@the-ascott.com',style:{color:T.navy}},'christine.park@the-ascott.com'),'.')),
       h(Card,null,
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 14px'}},'Recent Notices'),
         faculty.notices.slice(0,3).map(function(n){
@@ -374,8 +377,8 @@ function App(){
         var meta=[
           c.session && ['Session', c.session],
           c.period && ['Period', c.period],
-          c.days && ['Days', c.days],
           c.time && ['Time', c.time],
+          c.days && ['Days', c.days],
           c.location && ['Location', c.location],
         ].filter(Boolean);
         return h(Card,{key:i},
@@ -389,7 +392,7 @@ function App(){
           c.syllabusLink?
             h('div',null,
               h('a',{href:c.syllabusLink,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600,width:'fit-content'}},Icons.download(),' View Syllabus'),
-              h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Note: This syllabus is the version posted on the YISS course list. It is not synced with the Yonsei Academic Portal (학사포탈). If revisions are needed, they must also be made in the Academic Portal.'))
+              h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Note: This syllabus is the version posted on the YISS course list. It is not synced with the Yonsei Portal System (학사포탈). If revisions are needed, they must also be made in the Portal System.'))
           :h('span',{style:{fontSize:12,color:T.sub,fontStyle:'italic'}},'Syllabus not yet available')
         );
       })
@@ -406,6 +409,7 @@ function App(){
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Employment Contract'),
           Badge({status:faculty.documents.contract.status})),
+        h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'0 0 12px',lineHeight:1.5}},'This Contract is independent of and separate from your appointment contract with the Yonsei University Faculty Affairs Team.'),
         h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.contract.status==='signed'?('Signed on '+faculty.documents.contract.date):'Awaiting signature'),
         faculty.documents.contract.status==='signed'?
           (faculty.documents.contract.hasFile?
@@ -805,7 +809,7 @@ function App(){
       // ── Portal Links Management ──
       h(Card,{style:{padding:0,overflow:'hidden'}},
         h('div',{onClick:toggleLinks,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',cursor:'pointer',background:linksOpen?'#f8f9fb':'#fff'}},
-          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'🔗 Portal Links'),
+          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'🔗 Useful Links'),
           h('span',{style:{fontSize:14,color:T.sub,transform:linksOpen?'rotate(180deg)':'none',transition:'transform .2s'}},'▾')
         ),
         linksOpen&&h('div',{style:{padding:'0 16px 16px'}},
@@ -1012,12 +1016,7 @@ function App(){
 
     var payments = salary.payments || {courses:[],total:'',hasData:false};
     var courseLabel = function(i,n){ if(n<=1) return 'Payment Amount'; var ord=['1st','2nd','3rd','4th','5th']; return (ord[i]||((i+1)+'th'))+' Course'; };
-    return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
-      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}},
-        h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
-        status.submitted ? Badge({status:'submitted'}) : Badge({status:'pending'})
-      ),
-      payments.hasData && h(Card,null,
+    var paymentCard = payments.hasData && h(Card,null,
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 12px'}},'💰 Your Payment Amount'),
         h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
           payments.courses.map(function(p,i){
@@ -1029,10 +1028,25 @@ function App(){
             h('span',{style:{color:T.navy,fontWeight:700}},'Total'),
             h('span',{style:{color:T.navy,fontWeight:700,fontFamily:'monospace'}},payments.total))
         )
+      );
+    // 검수6: 국내(전임)은 강의료 금액만 표시. 은행정보 입력폼·제출 안내(Deadline/추가지급표) 숨김.
+    if(isFT){
+      return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
+        h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
+        paymentCard,
+        h(Card,{style:{background:'#f8f9fb'}},
+          h('p',{style:{margin:0,fontSize:13,color:T.sub,lineHeight:1.6}},'Bank account information submission is not required for domestic full-time faculty.'))
+      );
+    }
+    return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}},
+        h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
+        status.submitted ? Badge({status:'submitted'}) : Badge({status:'pending'})
       ),
+      paymentCard,
       h(Card,{style:{background:'#f8f9fb'}},
         h('p',{style:{margin:'0 0 8px',fontSize:13,color:T.text}},
-          h('strong',null,'Deadline: '),h('span',{style:{color:T.navy,fontWeight:600}},salary.deadline||'—')),
+          h('strong',null,'Bank Account Information Submission Deadline: '),h('span',{style:{color:T.navy,fontWeight:600}},salary.deadline||'—')),
         h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'Section 2 is only used for Salary Disbursement for ',h('strong',null,salary.yearLabel||'2026 YISS'),'.'),
         h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• If you use a ',h('strong',null,'Korean bank account'),', please fill out ',h('strong',null,'N/A'),' for fields 4–8.'),
         h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• Flight Reimbursement will also be given to this bank account information.'),
@@ -1040,6 +1054,20 @@ function App(){
         salary.payment6w && h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• ',h('strong',null,'6-Week Program: '),salary.payment6w),
         h('p',{style:{margin:'10px 0 0',fontSize:12,color:T.sub}},'Questions? Contact ',h('a',{href:'mailto:'+(salary.contactEmail||''),style:{color:T.navy}},salary.contactEmail||'isummer@yonsei.ac.kr'),'.'),
         status.submitted && status.updatedAt && h('p',{style:{margin:'8px 0 0',fontSize:11,color:T.sub}},'Last updated: ',status.updatedAt)
+      ),
+      h(Card,null,
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'📊 수강인원별 추가지급'),
+        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'Additional Payment by Course Enrollment'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          [['40–60명','KRW 500,000'],
+           ['60–80명','KRW 1,000,000 + 조교(TA)'],
+           ['80–100명','KRW 1,500,000 + 조교(TA)'],
+           ['100명+','KRW 2,000,000 + 조교(TA)']].map(function(r,i){
+            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<3?'1px solid '+T.bdr:'none',fontSize:13}},
+              h('span',{style:{color:T.text,fontWeight:600}},r[0]),
+              h('span',{style:{color:T.text,fontFamily:'monospace'}},r[1]));
+          })
+        )
       ),
       h(Card,null,
         sectionHead('Section 1. Personal Information'),
