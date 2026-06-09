@@ -948,7 +948,16 @@ function App(){
 
   function SalaryTab(){
     var salary = faculty.salary || MOCK.salary;
-    var _f = useState(Object.assign({},salary.data||{})), form = _f[0], setForm = _f[1];
+    var _initData = Object.assign({},salary.data||{});
+    // 검수8: 거주/비거주 판별자는 별도 컬럼 없이 UI 상태로만 관리.
+    // 제출분 재방문 시 기존 은행데이터로 추론(해외 전용 필드가 채워져 있으면 비거주자).
+    if(!_initData.residencyStatus && salary.submitted){
+      var _foreignFilled = ['branchName','bankAddress','abaNo','swiftCode','country','bankTownLocation','bankTownName'].some(function(k){
+        var v=String(_initData[k]||'').trim(); return v && v.toUpperCase()!=='N/A';
+      });
+      _initData.residencyStatus = _foreignFilled ? 'nonResident' : 'resident';
+    }
+    var _f = useState(_initData), form = _f[0], setForm = _f[1];
     var _st = useState({submitted:!!salary.submitted,submittedAt:salary.submittedAt||'',updatedAt:salary.updatedAt||''}), status = _st[0], setStatus = _st[1];
     var _sv = useState(false), saving = _sv[0], setSaving = _sv[1];
     var _err = useState(''), formError = _err[0], setFormError = _err[1];
@@ -962,8 +971,9 @@ function App(){
 
     function submit(){
       setFormError(''); setJustSaved(false);
-      if(!form.attestation){setFormError('Please confirm item 15 (Attestation).');return;}
-      if(!form.consent){setFormError('Please confirm item 16 (Consent of Personal Information).');return;}
+      if(!form.residencyStatus){setFormError('Please select Resident or Non-Resident in Section 2.');return;}
+      if(!form.attestation){setFormError('Please confirm the attestation in Section 5.');return;}
+      if(!form.consent){setFormError('Please confirm the consent of personal information in Section 5.');return;}
       setSaving(true);
       var token = sessionStorage.getItem('portal_token');
       callApi('saveSalaryDisbursement',{token:token,data:form}).then(function(res){
@@ -978,13 +988,14 @@ function App(){
     }
 
     var labelStyle = {display:'block',fontSize:13,fontWeight:600,color:T.text,marginBottom:6,lineHeight:1.45};
+    var krSub = {display:'block',fontSize:12,fontWeight:400,color:T.sub,marginTop:3,lineHeight:1.4};
     var requiredStar = h('span',{style:{color:T.red}},' *');
     var formLocked = !!status.submitted;
 
     function fieldText(opts){
       var disabled = !!opts.locked || formLocked;
       return h('div',{style:{marginBottom:14}},
-        h('label',{style:labelStyle},opts.label,opts.required?requiredStar:null),
+        h('label',{style:labelStyle},opts.label,opts.required?requiredStar:null,opts.kr&&h('span',{style:krSub},opts.kr)),
         h('input',{type:'text',value:form[opts.field]||'',onChange:function(e){update(opts.field,e.target.value)},placeholder:opts.placeholder||'',disabled:disabled,style:S(inputStyle(),disabled?{background:'#f0f2f5',color:T.sub,cursor:'not-allowed'}:{})})
       );
     }
@@ -1000,7 +1011,7 @@ function App(){
         );
       }
       return h('div',{style:{marginBottom:14}},
-        h('label',{style:labelStyle},opts.label,requiredStar),
+        h('label',{style:labelStyle},opts.label,requiredStar,opts.kr&&h('span',{style:krSub},opts.kr)),
         h('div',null, pill('Yes'), pill('No'))
       );
     }
@@ -1008,7 +1019,25 @@ function App(){
     function fieldCheckbox(opts){
       return h('label',{style:{display:'flex',alignItems:'flex-start',gap:10,padding:'4px 0',cursor:formLocked?'not-allowed':'pointer'}},
         h('input',{type:'checkbox',checked:!!form[opts.field],disabled:formLocked,onChange:function(e){update(opts.field,e.target.checked)},style:{marginTop:4}}),
-        h('span',{style:{fontSize:13,lineHeight:1.55,color:T.text,flex:1}},opts.label,opts.required?requiredStar:null)
+        h('span',{style:{fontSize:13,lineHeight:1.55,color:T.text,flex:1}},opts.label,opts.required?requiredStar:null,opts.kr&&h('span',{style:{display:'block',fontSize:12,fontWeight:400,color:T.sub,marginTop:3,lineHeight:1.45}},opts.kr))
+      );
+    }
+
+    // 검수8: 거주자/비거주자 선택 (Section 3/4 분기 판별자, UI 상태 전용 — 컬럼 미저장).
+    function residencySelector(){
+      var val = form.residencyStatus || '';
+      function opt(value, en, kr){
+        var active = val===value;
+        return h('label',{key:value,style:{display:'flex',alignItems:'flex-start',gap:8,flex:'1 1 220px',padding:'10px 14px',border:'1.5px solid '+(active?T.navy:T.bdr),borderRadius:8,cursor:formLocked?'not-allowed':'pointer',background:active?'rgba(0,55,100,.06)':'#fff',opacity:formLocked&&!active?0.6:1}},
+          h('input',{type:'radio',name:'residencyStatus',value:value,checked:active,disabled:formLocked,onChange:function(){update('residencyStatus',value)},style:{marginTop:3}}),
+          h('span',{style:{lineHeight:1.4}},
+            h('span',{style:{display:'block',fontSize:13,fontWeight:600,color:active?T.navy:T.text}},en),
+            h('span',{style:{display:'block',fontSize:12,color:T.sub,marginTop:2}},kr)));
+      }
+      return h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
+        h('label',{style:labelStyle},'Based on your answers above, please select your status:',requiredStar,
+          h('span',{style:krSub},'위 답변에 따라 본인의 상태를 선택하세요.')),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}}, opt('resident','Resident in Korea','한국 거주자'), opt('nonResident','Non-Resident in Korea','한국 비거주자'))
       );
     }
 
@@ -1068,8 +1097,7 @@ function App(){
       h(Card,{style:{background:'#f8f9fb'}},
         h('p',{style:{margin:'0 0 8px',fontSize:13,color:T.text}},
           h('strong',null,'Bank Account Information Submission Deadline: '),h('span',{style:{color:T.navy,fontWeight:600}},salary.deadline||'—')),
-        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'Section 2 is only used for Salary Disbursement for ',h('strong',null,salary.yearLabel||'2026 YISS'),'.'),
-        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• If you use a ',h('strong',null,'Korean bank account'),', please fill out ',h('strong',null,'N/A'),' for fields 4–8.'),
+        h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'This form is used for Salary Disbursement for ',h('strong',null,salary.yearLabel||'2026 YISS'),'. (',salary.yearLabel||'2026 YISS',' 강의료 지급용)'),
         h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• Flight Reimbursement will also be given to this bank account information.'),
         salary.payment4w && h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• ',h('strong',null,'4-Week Program: '),salary.payment4w),
         salary.payment6w && h('p',{style:{margin:'0 0 6px',fontSize:13,color:T.text}},'• ',h('strong',null,'6-Week Program: '),salary.payment6w),
@@ -1077,51 +1105,65 @@ function App(){
         status.submitted && status.updatedAt && h('p',{style:{margin:'8px 0 0',fontSize:11,color:T.sub}},'Last updated: ',status.updatedAt)
       ),
       h(Card,null,
-        sectionHead('Section 1. Personal Information'),
-        fieldText({label:'1. Full Name of Faculty',field:'fullName',required:true}),
-        fieldText({label:'2. Date of Birth',field:'dateOfBirth',locked:true,placeholder:'YYYY-MM-DD'}),
-        fieldText({label:'3. Passport No. (used to enter Korea) or Alien Registration No.',field:'passportOrArc',required:true}),
-        fieldText({label:'4. Nationality (Passport used to enter Korea)',field:'nationality',required:true}),
-        fieldText({label:'5. Telephone (cell phone) No.',field:'telephone',required:true,placeholder:'e.g., +82-10-1234-5678'}),
-        h('div',{style:{margin:'8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
-          h('strong',{style:{color:T.text}},'Mailing Address (for remittance form)'),h('br'),
-          'Enter the address where you reside / receive mail. This appears on the bank remittance application as the beneficiary’s address.'),
-        fieldText({label:'6. Street Address',field:'streetAddress',required:true,placeholder:'e.g., 50 Yonsei-ro, Seodaemun-gu'}),
-        fieldText({label:'7. City',field:'city',required:true,placeholder:'e.g., Seoul'}),
-        fieldText({label:'8. Region / State / Province',field:'region',required:true,placeholder:'e.g., Seoul / California / N/A'}),
-        fieldText({label:'9. Country',field:'mailingCountry',required:true,placeholder:'e.g., South Korea'}),
-        fieldYesNo({label:'10. Do you have a permanent address in Korea?',field:'permanentAddressKorea'}),
-        fieldYesNo({label:'11. Do you continue to live, or plan to live, in Korea for more than 183 days?',field:'liveOver183Days'}),
-        fieldYesNo({label:'12. Do you have a job that requires you to stay in Korea for more than 183 days continuously?',field:'jobRequiresStay'}),
-        fieldYesNo({label:'13. Are there any family members (spouse, children, etc.) living together with you in Korea?',field:'familyInKorea'}),
-        fieldYesNo({label:'14. Do you have a basis for living in Korea such as business or real estate?',field:'koreanBusinessOrRE'}),
-        h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
-          fieldCheckbox({field:'attestation',required:true,label:'15. I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.'})
-        ),
-        h('div',{style:{marginTop:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
-          h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 10px',lineHeight:1.6}},
-            h('strong',{style:{color:T.text}},'16. Consent of Personal Information'),h('br'),
-            h('strong',null,'16-1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
-            h('strong',null,'16-2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No., Mailing Address.',h('br'),h('br'),
-            h('em',null,'※ You have the right to reject the collection and use of personal information, but if you exercise this right you will not be able to be employed at the university.')
-          ),
-          fieldCheckbox({field:'consent',required:true,label:'I consent to the collection and use of my personal information as described above.'})
-        )
+        sectionHead('Section 1. Personal Information (개인정보)'),
+        fieldText({label:'Full Name of Faculty (either Korean or English)',kr:'이름 (한국어 또는 영어)',field:'fullName',required:true}),
+        fieldText({label:'Date of Birth',kr:'생년월일',field:'dateOfBirth',locked:true,placeholder:'YYYY-MM-DD'}),
+        fieldText({label:'Passport No., Alien Registration No. or Korean Registration No.',kr:'여권번호, 외국인등록번호 또는 주민등록번호',field:'passportOrArc',required:true}),
+        fieldText({label:'Nationality',kr:'국적',field:'nationality',required:true}),
+        fieldText({label:'Telephone No.',kr:'연락처',field:'telephone',required:true,placeholder:'e.g., +82-10-1234-5678'})
       ),
       h(Card,null,
-        sectionHead('Section 2. Bank Account Information'),
-        h('p',{style:{fontSize:12,color:T.sub,margin:'-8px 0 14px',lineHeight:1.55,padding:'8px 12px',background:T.amberL,color:T.amber,borderRadius:6}},
-          h('strong',null,'Note: '),'If you use a Korean bank account, please fill out ',h('strong',null,'N/A'),' for fields 4–8.'),
-        fieldText({label:'1. Full Name (Beneficiary Name) used for the bank account',field:'beneficiaryName',required:true}),
-        fieldText({label:'2. Beneficiary (Receiving) Bank Name',field:'bankName',required:true}),
-        fieldText({label:'3. Beneficiary (Receiving) Bank Account No.',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'}),
-        fieldText({label:'4. Receiving Bank Branch Name',field:'branchName',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'5. Beneficiary (Receiving) Bank Address — Street Name',field:'bankAddress',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'6. Beneficiary (Receiving) Bank Address — Town Location',field:'bankTownLocation',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'7. Beneficiary (Receiving) Bank Address — Town Name',field:'bankTownName',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'8. Country Location of Beneficiary (Receiving) Bank',field:'country',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'9. Bank Code: ABA No. (9 digits for American account)',field:'abaNo',required:true,placeholder:'N/A for Korean bank'}),
-        fieldText({label:'10. SWIFT Code',field:'swiftCode',required:true,placeholder:'N/A for Korean bank'})
+        sectionHead('Section 2. Classification of Resident or Non-Resident in Korea (한국 거주자/비거주자 판별)'),
+        h('div',{style:{margin:'-8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+          h('p',{style:{margin:0,color:T.text}},'Section 2 is to determine your status as a Resident or Non-Resident in Korea. If you answer “No” to the questions below, you are classified as a Non-Resident in Korea.'),
+          h('p',{style:{margin:'4px 0 0'}},'Section 2는 한국 거주자/비거주자 여부를 판별하기 위한 항목입니다. 아래 질문에 모두 “No”로 답하면 비거주자로 분류됩니다.')),
+        fieldYesNo({label:'Do you have a permanent address in Korea?',kr:'한국에 영구적인 주소가 있습니까?',field:'permanentAddressKorea'}),
+        fieldYesNo({label:'Do you continue to live, or plan to live, in Korea for more than 183 days?',kr:'한국에 183일 이상 거주하고 있거나 거주할 계획입니까?',field:'liveOver183Days'}),
+        fieldYesNo({label:'Do you have a job that requires you to stay in Korea for more than 183 days continuously?',kr:'한국에 183일 이상 연속하여 체류해야 하는 직업이 있습니까?',field:'jobRequiresStay'}),
+        fieldYesNo({label:'Are there any family members (spouse, children, etc.) living together with you in Korea?',kr:'한국에 함께 거주하는 가족(배우자, 자녀 등)이 있습니까?',field:'familyInKorea'}),
+        fieldYesNo({label:'Do you have a basis for living in Korea such as business or real estate?',kr:'사업체나 부동산 등 한국에 거주할 기반이 있습니까?',field:'koreanBusinessOrRE'}),
+        residencySelector()
+      ),
+      form.residencyStatus==='resident' && h(Card,null,
+        sectionHead('Section 3. Bank Information Request for Resident in Korea (한국 거주자 은행정보 입력 요청)'),
+        fieldText({label:'Beneficiary Name',kr:'수취인 (계좌명)',field:'beneficiaryName',required:true}),
+        fieldText({label:'Bank Name',kr:'은행명',field:'bankName',required:true}),
+        fieldText({label:'Bank Account No.',kr:'계좌정보',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'})
+      ),
+      form.residencyStatus==='nonResident' && h(Card,null,
+        sectionHead('Section 4. Bank Information Request for Non-Resident in Korea (한국 비거주자 은행정보 입력 요청)'),
+        fieldText({label:'Beneficiary Name',kr:'수취인 (계좌명)',field:'beneficiaryName',required:true}),
+        fieldText({label:'Bank Name',kr:'은행명',field:'bankName',required:true}),
+        fieldText({label:'Bank Account No.',kr:'계좌정보',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'}),
+        fieldText({label:'Bank Branch Name',kr:'은행지점명',field:'branchName',required:true}),
+        fieldText({label:'Bank Street Name',kr:'은행 주소 정보',field:'bankAddress',required:true}),
+        fieldText({label:'Bank Town Location (District)',kr:'은행 소재지 (구/지역)',field:'bankTownLocation',required:true}),
+        fieldText({label:'Bank Town Name (City)',kr:'은행 소재 도시',field:'bankTownName',required:true}),
+        fieldText({label:'Bank Country',kr:'수취 은행 국가',field:'country',required:true}),
+        fieldText({label:'ABA No. (9 digits for American account)',kr:'ABA 번호',field:'abaNo',required:true}),
+        fieldText({label:'Swift Code',kr:'스위프트 코드',field:'swiftCode',required:true}),
+        h('div',{style:{margin:'8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+          h('strong',{style:{color:T.text}},'Personal Address (for remittance form)'),h('br'),
+          'This appears on the bank remittance application as the beneficiary’s address. / 외화송금신청서에 수취인 주소로 기재됩니다.'),
+        fieldText({label:'Personal Address (St., Ave, Chome)',kr:'개인 주소 (도로명 등 상세주소)',field:'streetAddress',required:true}),
+        fieldText({label:'Personal Town Location (District)',kr:'개인 주소 소재지 (구/지역)',field:'region',required:true}),
+        fieldText({label:'Personal Town Name (City, Town)',kr:'개인 주소 도시',field:'city',required:true}),
+        fieldText({label:'Personal Address Country',kr:'개인 주소 국가',field:'mailingCountry',required:true})
+      ),
+      h(Card,null,
+        sectionHead('Section 5. Consent of Personal Information (개인정보 수집·이용 동의)'),
+        h('div',{style:{marginBottom:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
+          fieldCheckbox({field:'attestation',required:true,label:'I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.',kr:'본인은 위 정보가 모두 사실임을 확인하며, 허위 기재로 인한 불이익이 발생할 경우 그에 대한 책임을 부담합니다.'})
+        ),
+        h('div',{style:{padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
+          h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 10px',lineHeight:1.6}},
+            h('strong',{style:{color:T.text}},'Consent of Personal Information'),h('br'),
+            h('strong',null,'1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
+            h('strong',null,'2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No., Mailing Address.',h('br'),h('br'),
+            h('em',null,'※ You have the right to reject the collection and use of personal information, but if you exercise this right you will not be able to be employed at the university.')
+          ),
+          fieldCheckbox({field:'consent',required:true,label:'I consent to the collection and use of my personal information as described above.',kr:'본인은 위와 같이 개인정보를 수집·이용하는 데 동의합니다.'})
+        )
       ),
       formError && h('div',{style:{padding:'10px 14px',background:'#fef2f2',color:T.red,borderRadius:8,fontSize:13}},formError),
       justSaved && h('div',{style:{padding:'10px 14px',background:T.greenL,color:T.green,borderRadius:8,fontSize:13,fontWeight:500,display:'flex',alignItems:'center',gap:6}},Icons.check(),' Submitted successfully.'),
