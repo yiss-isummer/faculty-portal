@@ -1031,8 +1031,8 @@ function App(){
       );
     // 수강인원별 추가지급 안내 (강의료 관련 — 전임 포함 모든 교원에게 표시).
     var enrollmentCard = h(Card,null,
-        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'📊 수강인원별 추가지급'),
-        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'Additional Payment by Course Enrollment'),
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'📊 Additional Payment by Course Enrollment'),
+        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'수강인원별 추가지급'),
         h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
           [['40명 이상 ~ 60명 미만','40–60 students','KRW 500,000 추가지급','KRW 500,000 additional payment'],
            ['60명 이상 ~ 80명 미만','60–80 students','KRW 1,000,000 추가지급 · 수업 전담 조교 지원','KRW 1,000,000 additional payment + dedicated teaching assistant'],
@@ -1040,11 +1040,11 @@ function App(){
            ['100명 이상','100+ students','KRW 2,000,000 추가지급 · 수업 전담 조교 지원','KRW 2,000,000 additional payment + dedicated teaching assistant']].map(function(r,i){
             return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,padding:'8px 0',borderBottom:i<3?'1px solid '+T.bdr:'none',fontSize:13}},
               h('div',{style:{whiteSpace:'nowrap'}},
-                h('div',{style:{color:T.text,fontWeight:600}},r[0]),
-                h('div',{style:{color:T.sub,fontSize:11,marginTop:1}},r[1])),
+                h('div',{style:{color:T.text,fontWeight:600}},r[1]),
+                h('div',{style:{color:T.sub,fontSize:11,marginTop:1}},r[0])),
               h('div',{style:{textAlign:'right',lineHeight:1.5}},
-                h('div',{style:{color:T.text}},r[2]),
-                h('div',{style:{color:T.sub,fontSize:11,marginTop:1}},r[3])));
+                h('div',{style:{color:T.text}},r[3]),
+                h('div',{style:{color:T.sub,fontSize:11,marginTop:1}},r[2])));
           })
         )
       );
