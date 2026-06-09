@@ -409,7 +409,7 @@ function App(){
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Office of International Affairs Contract'),
           Badge({status:faculty.documents.contract.status})),
-        h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'0 0 12px',lineHeight:1.5}},'This Contract is independent of and separate from your appointment contract with the Yonsei University Faculty Affairs Team.'),
+        h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'0 0 12px',lineHeight:1.5}},'This Office of International Affairs (OIA) Contract is independent of and separate from your appointment contract with the Yonsei University Faculty Affairs Team.'),
         faculty.documents.contract.status==='signed' && h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},'Signed on '+faculty.documents.contract.date),
         faculty.documents.contract.status==='signed'?
           (faculty.documents.contract.hasFile?
