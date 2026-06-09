@@ -407,10 +407,10 @@ function App(){
       h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Documents'),
       h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
-          h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Employment Contract'),
+          h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Office of International Affairs Contract'),
           Badge({status:faculty.documents.contract.status})),
         h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'0 0 12px',lineHeight:1.5}},'This Contract is independent of and separate from your appointment contract with the Yonsei University Faculty Affairs Team.'),
-        h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},faculty.documents.contract.status==='signed'?('Signed on '+faculty.documents.contract.date):'Awaiting signature'),
+        faculty.documents.contract.status==='signed' && h('p',{style:{fontSize:13,color:T.sub,margin:'0 0 12px'}},'Signed on '+faculty.documents.contract.date),
         faculty.documents.contract.status==='signed'?
           (faculty.documents.contract.hasFile?
             h('button',{onClick:function(){
@@ -423,7 +423,7 @@ function App(){
           h('div',null,
             h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
               h('a',{href:faculty.documents.contract.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Sign Contract →')),
-            h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Please review the detailed contract sent to your email before signing.'))
+            h('p',{style:{fontSize:14,fontWeight:600,color:T.red,margin:'10px 0 0',lineHeight:1.5}},'Please review the detailed contract sent to your email before signing.'))
         :null,
         contractDocs.length>0&&h('div',{style:{marginTop:14,paddingTop:14,borderTop:'1px solid '+T.bdr}},
           h('div',{style:{fontSize:12,color:T.sub,fontWeight:600,marginBottom:8}},'Related documents'),
