@@ -326,7 +326,7 @@ function App(){
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
             actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
-          if(faculty.salary && !faculty.salary.submitted){
+          if(!isFT && faculty.salary && !faculty.salary.submitted){
             actions.push({key:'salary',label:'Submit salary disbursement form'+(faculty.salary.deadline?(' (by '+faculty.salary.deadline+')'):''),tab:'salary'});
           }
           if(actions.length===0){
