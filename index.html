@@ -331,6 +331,9 @@ function App(){
           if(!isFT && faculty.salary && !faculty.salary.submitted){
             actions.push({key:'salary',label:'Submit salary disbursement form'+(faculty.salary.deadline?(' (by '+faculty.salary.deadline+')'):''),tab:'salary'});
           }
+          if(faculty.flight && faculty.flight.eligible && !(faculty.flight.files||[]).length){
+            actions.push({key:'flight',label:'Upload flight reimbursement documents (e-ticket receipt, boarding pass, etc.)',tab:'salary'});
+          }
           if(actions.length===0){
             return h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
               h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
