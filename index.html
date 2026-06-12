@@ -971,9 +971,40 @@ function App(){
 
     function submit(){
       setFormError(''); setJustSaved(false);
+      // 필수필드 검증 — 빈칸이면 제출 차단 (해당 없는 항목은 N/A 입력 안내)
+      var requiredFields = [
+        ['fullName','Full Name (Section 1)'],
+        ['passportOrArc','Passport/ARC No. (Section 1)'],
+        ['nationality','Nationality (Section 1)'],
+        ['telephone','Telephone No. (Section 1)'],
+        ['permanentAddressKorea','Permanent address in Korea (Section 2)'],
+        ['liveOver183Days','Live in Korea over 183 days (Section 2)'],
+        ['jobRequiresStay','Job requires stay over 183 days (Section 2)'],
+        ['familyInKorea','Family members in Korea (Section 2)'],
+        ['koreanBusinessOrRE','Business or real estate in Korea (Section 2)'],
+        ['beneficiaryName','Beneficiary Name (Section 3)'],
+        ['bankName','Bank Name (Section 3)'],
+        ['accountNo','Bank Account No. (Section 3)'],
+        ['branchName','Bank Branch Name (Section 3)'],
+        ['bankAddress','Bank Street Name (Section 3)'],
+        ['bankTownLocation','Bank Town Location (Section 3)'],
+        ['bankTownName','Bank Town Name (Section 3)'],
+        ['country','Bank Country (Section 3)'],
+        ['abaNo','ABA No. (Section 3 — enter N/A if not applicable)'],
+        ['swiftCode','Swift Code (Section 3)'],
+        ['streetAddress','Personal Address (Section 3)'],
+        ['region','Personal Town Location (Section 3)'],
+        ['city','Personal Town Name (Section 3)'],
+        ['mailingCountry','Personal Address Country (Section 3)']
+      ];
       if(!form.residencyStatus){setFormError('Please select Resident or Non-Resident in Section 2.');return;}
-      if(!form.attestation){setFormError('Please confirm the attestation in Section 5.');return;}
-      if(!form.consent){setFormError('Please confirm the consent of personal information in Section 5.');return;}
+      var missing = requiredFields.filter(function(f){return !String(form[f[0]]||'').trim()}).map(function(f){return f[1]});
+      if(missing.length){
+        setFormError('Please fill in all required fields (enter N/A if not applicable): '+missing.join(', '));
+        return;
+      }
+      if(!form.attestation){setFormError('Please confirm the attestation in Section 4.');return;}
+      if(!form.consent){setFormError('Please confirm the consent of personal information in Section 4.');return;}
       setSaving(true);
       var token = sessionStorage.getItem('portal_token');
       callApi('saveSalaryDisbursement',{token:token,data:form}).then(function(res){
@@ -1023,7 +1054,7 @@ function App(){
       );
     }
 
-    // 검수8: 거주자/비거주자 선택 (Section 3/4 분기 판별자, UI 상태 전용 — 컬럼 미저장).
+    // 검수8: 거주자/비거주자 선택 (Section 3 노출 트리거 + 기록용, UI 상태 전용 — 컬럼 미저장).
     function residencySelector(){
       var val = form.residencyStatus || '';
       function opt(value, en, kr){
@@ -1124,14 +1155,12 @@ function App(){
         fieldYesNo({label:'Do you have a basis for living in Korea such as business or real estate?',kr:'사업체나 부동산 등 한국에 거주할 기반이 있습니까?',field:'koreanBusinessOrRE'}),
         residencySelector()
       ),
-      form.residencyStatus==='resident' && h(Card,null,
-        sectionHead('Section 3. Bank Information Request for Resident in Korea (한국 거주자 은행정보 입력 요청)'),
-        fieldText({label:'Beneficiary Name',kr:'수취인 (계좌명)',field:'beneficiaryName',required:true}),
-        fieldText({label:'Bank Name',kr:'은행명',field:'bankName',required:true}),
-        fieldText({label:'Bank Account No.',kr:'계좌정보',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'})
-      ),
-      form.residencyStatus==='nonResident' && h(Card,null,
-        sectionHead('Section 4. Bank Information Request for Non-Resident in Korea (한국 비거주자 은행정보 입력 요청)'),
+      // 검수: 거주/비거주 공통 단일 섹션 — 전 필드 수집, 해당 없는 항목은 N/A 입력.
+      !!form.residencyStatus && h(Card,null,
+        sectionHead('Section 3. Bank Information (은행정보 입력)'),
+        h('div',{style:{margin:'-8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+          h('p',{style:{margin:0,color:T.text}},'All fields are required. If a field does not apply to your bank (e.g., ABA No. for non-US banks, or some fields for Korean domestic banks), please enter ',h('strong',null,'N/A'),'.'),
+          h('p',{style:{margin:'4px 0 0'}},'모든 항목은 필수입니다. 해당 사항이 없는 항목(예: 미국 외 은행의 ABA 번호, 한국 국내은행의 일부 항목)은 N/A로 입력해 주세요.')),
         fieldText({label:'Beneficiary Name',kr:'수취인 (계좌명)',field:'beneficiaryName',required:true}),
         fieldText({label:'Bank Name',kr:'은행명',field:'bankName',required:true}),
         fieldText({label:'Bank Account No.',kr:'계좌정보',field:'accountNo',required:true,placeholder:'Leading zeros will be preserved'}),
@@ -1140,7 +1169,7 @@ function App(){
         fieldText({label:'Bank Town Location (District)',kr:'은행 소재지 (구/지역)',field:'bankTownLocation',required:true}),
         fieldText({label:'Bank Town Name (City)',kr:'은행 소재 도시',field:'bankTownName',required:true}),
         fieldText({label:'Bank Country',kr:'수취 은행 국가',field:'country',required:true}),
-        fieldText({label:'ABA No. (9 digits for American account)',kr:'ABA 번호',field:'abaNo',required:true}),
+        fieldText({label:'ABA No. (9 digits for American account; otherwise N/A)',kr:'ABA 번호 (미국 계좌만 해당, 그 외 N/A)',field:'abaNo',required:true}),
         fieldText({label:'Swift Code',kr:'스위프트 코드',field:'swiftCode',required:true}),
         h('div',{style:{margin:'8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
           h('strong',{style:{color:T.text}},'Personal Address (for remittance form)'),h('br'),
@@ -1151,7 +1180,7 @@ function App(){
         fieldText({label:'Personal Address Country',kr:'개인 주소 국가',field:'mailingCountry',required:true})
       ),
       h(Card,null,
-        sectionHead('Section 5. Consent of Personal Information (개인정보 수집·이용 동의)'),
+        sectionHead('Section 4. Consent of Personal Information (개인정보 수집·이용 동의)'),
         h('div',{style:{marginBottom:8,padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
           fieldCheckbox({field:'attestation',required:true,label:'I attest that all information provided above is true, and I will bear responsibility if any disadvantage occurs from false indication of the information.',kr:'본인은 위 정보가 모두 사실임을 확인하며, 허위 기재로 인한 불이익이 발생할 경우 그에 대한 책임을 부담합니다.'})
         ),
