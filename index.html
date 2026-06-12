@@ -103,6 +103,7 @@ var MOCK = {
   housing:{applicable:false},
   resources:[],
   salary:{submitted:false,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
+  flight:{eligible:false,files:[]},
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -121,6 +122,7 @@ function loadPortalData(token){
       housing: dash.housing || MOCK.housing,
       resources: dash.resources || MOCK.resources,
       salary: dash.salary || MOCK.salary,
+      flight: dash.flight || MOCK.flight,
     });
   });
 }
@@ -962,6 +964,11 @@ function App(){
     var _sv = useState(false), saving = _sv[0], setSaving = _sv[1];
     var _err = useState(''), formError = _err[0], setFormError = _err[1];
     var _ok = useState(false), justSaved = _ok[0], setJustSaved = _ok[1];
+    // 항공료 증빙 업로드 (FlightReimb=Y 대상만 카드 표시)
+    var flight = faculty.flight || MOCK.flight;
+    var _ff = useState(flight.files||[]), flightFiles = _ff[0], setFlightFiles = _ff[1];
+    var _fb = useState(false), flightBusy = _fb[0], setFlightBusy = _fb[1];
+    var _fm = useState(''), flightMsg = _fm[0], setFlightMsg = _fm[1];
 
     function update(field, value){
       if(status.submitted) return;
@@ -1108,12 +1115,75 @@ function App(){
           })
         )
       );
+    // 항공료 증빙 업로드 카드 — FlightReimb=Y 대상만. 추가 업로드만 허용(삭제는 OIA 이메일 요청).
+    function onFlightFiles(e){
+      var list = Array.prototype.slice.call(e.target.files||[]);
+      e.target.value='';
+      if(!list.length) return;
+      var allowed = ['application/pdf','image/jpeg','image/png'];
+      for(var i=0;i<list.length;i++){
+        if(allowed.indexOf(list[i].type)===-1){setFlightMsg('Only PDF, JPG, or PNG files are allowed: '+list[i].name);return;}
+        if(list[i].size>10*1024*1024){setFlightMsg('File exceeds the 10MB limit: '+list[i].name);return;}
+      }
+      setFlightMsg(''); setFlightBusy(true);
+      var token = sessionStorage.getItem('portal_token');
+      var idx = 0;
+      function next(){
+        if(idx>=list.length){setFlightBusy(false);setFlightMsg('');return;}
+        var f = list[idx];
+        setFlightMsg('Uploading '+(idx+1)+' / '+list.length+' — '+f.name);
+        var reader = new FileReader();
+        reader.onload = function(){
+          var b64 = String(reader.result).split(',')[1];
+          callApi('uploadFlightFile',{token:token,file:{name:f.name,mimeType:f.type,data:b64}}).then(function(res){
+            if(res.expired){handleLogout();return;}
+            if(!res.success){setFlightBusy(false);setFlightMsg(res.message||('Upload failed: '+f.name));return;}
+            setFlightFiles(res.files||[]);
+            idx++; next();
+          }).catch(function(){setFlightBusy(false);setFlightMsg('Network error while uploading '+f.name);});
+        };
+        reader.onerror = function(){setFlightBusy(false);setFlightMsg('Could not read file: '+f.name);};
+        reader.readAsDataURL(f);
+      }
+      next();
+    }
+    var flightCard = flight.eligible && h(Card,null,
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 2px'}},'✈️ Flight Reimbursement Documents'),
+        h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'항공료 증빙자료 제출'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:14}},
+          [['U.S. East Coast & Europe','동부 미주 · 유럽','USD 3,000'],
+           ['U.S. West Coast','서부 미주','USD 2,500'],
+           ['East Asia','동아시아','USD 1,000']].map(function(r,i){
+            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,padding:'8px 0',borderBottom:i<2?'1px solid '+T.bdr:'none',fontSize:13}},
+              h('div',null,
+                h('div',{style:{color:T.text,fontWeight:600}},r[0]),
+                h('div',{style:{color:T.sub,fontSize:11,marginTop:1}},r[1])),
+              h('div',{style:{color:T.text,fontWeight:600,whiteSpace:'nowrap'}},r[2]));
+          })
+        ),
+        h('div',{style:{marginBottom:12,padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+          h('p',{style:{margin:0,color:T.text}},'Please upload proof of your flight expenses (e-ticket receipt, boarding pass, etc.). PDF, JPG, or PNG — up to 10MB per file, multiple files allowed.'),
+          h('p',{style:{margin:'4px 0 0'}},'항공료 증빙자료(전자항공권 영수증, 탑승권 등)를 업로드해 주세요. PDF·JPG·PNG, 파일당 10MB, 여러 파일 가능.'),
+          h('p',{style:{margin:'4px 0 0'}},'To replace a file, upload a new one and email ',h('a',{href:'mailto:'+(salary.contactEmail||'isummer@yonsei.ac.kr'),style:{color:T.navy}},salary.contactEmail||'isummer@yonsei.ac.kr'),' to remove the old file. / 파일 교체가 필요하면 새 파일을 올린 뒤 이메일로 기존 파일 삭제를 요청해 주세요.')),
+        flightFiles.length>0 && h('div',{style:{marginBottom:12}},
+          h('p',{style:{fontSize:12,fontWeight:600,color:T.text,margin:'0 0 6px'}},'Uploaded files ('+flightFiles.length+')'),
+          flightFiles.map(function(f,i){
+            return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',gap:12,padding:'6px 0',borderBottom:i<flightFiles.length-1?'1px solid '+T.bdr:'none',fontSize:12}},
+              h('span',{style:{color:T.text,wordBreak:'break-all'}},'📎 '+f.name),
+              h('span',{style:{color:T.sub,whiteSpace:'nowrap'}},f.uploadedAt));
+          })),
+        flightMsg && h('div',{style:{marginBottom:10,padding:'8px 12px',background:flightBusy?'#f8f9fb':'#fef2f2',color:flightBusy?T.sub:T.red,borderRadius:8,fontSize:12}},flightMsg),
+        h('label',{style:{display:'inline-flex',alignItems:'center',gap:6,padding:'9px 18px',background:flightBusy?'#9ca3af':T.navy,color:'#fff',borderRadius:10,fontSize:13,fontWeight:600,cursor:flightBusy?'wait':'pointer',width:'fit-content'}},
+          flightBusy?'Uploading…':'Upload Files ↑',
+          h('input',{type:'file',multiple:true,accept:'.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png',disabled:flightBusy,onChange:onFlightFiles,style:{display:'none'}}))
+      );
     // 검수6: 국내(전임)은 은행정보 입력폼·Deadline 숨김. 단 강의료 금액·추가지급 안내는 표시.
     if(isFT){
       return h('div',{style:{display:'flex',flexDirection:'column',gap:16,maxWidth:760}},
         h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Salary Disbursement'),
         paymentCard,
         enrollmentCard,
+        flightCard,
         h(Card,{style:{background:'#f8f9fb'}},
           h('p',{style:{margin:0,fontSize:13,color:T.sub,lineHeight:1.6}},'Bank account information submission is not required for domestic full-time faculty.'))
       );
@@ -1201,7 +1271,8 @@ function App(){
             h('strong',null,'Form locked. '),'Your submission has been received',status.submittedAt?(' on '+status.submittedAt):'','. To correct any information, please contact ',h('a',{href:'mailto:'+(salary.contactEmail||''),style:{color:T.green,fontWeight:600}},salary.contactEmail||'isummer@yonsei.ac.kr'),'.')
         : h('button',{onClick:submit,disabled:saving,style:S(btnPrimary,{opacity:saving?.7:1,maxWidth:260,alignSelf:'flex-start'})},
             saving ? 'Saving…' : 'Submit'
-          )
+          ),
+      flightCard
     );
   }
 
