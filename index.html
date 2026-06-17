@@ -503,6 +503,7 @@ function App(){
     var _l=useState(true),loadingEv=_l[0],setLoadingEv=_l[1];
     var _er=useState(''),evErr=_er[0],setEvErr=_er[1];
     var _p=useState({}),picks=_p[0],setPicks=_p[1];          // eventId -> 선택(제출 전)
+    var _x=useState({}),extras=_x[0],setExtras=_x[1];         // eventId -> 추가 자유입력(제출 전)
     var _s=useState(null),submitting=_s[0],setSubmitting=_s[1]; // 제출 중인 eventId
 
     function loadEvents(){
@@ -520,10 +521,12 @@ function App(){
     function submit(ev){
       var choice=picks[ev.id];
       if(!choice){alert('Please select a response.');return;}
+      var extraVal=(extras[ev.id]||'').trim();
+      if(ev.extraLabel&&ev.extraRequired&&!extraVal){alert('Please answer: '+ev.extraLabel);return;}
       if(!confirm('Submit "'+choice+'"?\n\nResponses cannot be changed after submitting.')) return;
       var token=sessionStorage.getItem('portal_token');
       setSubmitting(ev.id);
-      callApi('submitRsvp',{token:token,eventId:ev.id,response:choice}).then(function(res){
+      callApi('submitRsvp',{token:token,eventId:ev.id,response:choice,extra:extraVal}).then(function(res){
         setSubmitting(null);
         if(res.expired){handleLogout();return;}
         if(!res.success){alert(res.message||'Submit failed.');return;}
@@ -552,8 +555,11 @@ function App(){
           ),
           ev.description&&h('p',{style:{fontSize:13,color:T.text,lineHeight:1.6,margin:'0 0 14px',whiteSpace:'pre-wrap'}},ev.description),
           responded?
-            h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:T.greenL,borderRadius:8,fontSize:13,fontWeight:600,color:T.green}},
-              Icons.check(),' You responded: ',ev.myResponse)
+            h('div',null,
+              h('div',{style:{padding:'10px 14px',background:T.greenL,borderRadius:8,fontSize:13,color:T.green}},
+                h('div',{style:{display:'flex',alignItems:'center',gap:8,fontWeight:600}},Icons.check(),' You responded: ',ev.myResponse),
+                ev.extraLabel&&ev.myExtra&&h('div',{style:{marginTop:6,fontWeight:500}},ev.extraLabel+': ',h('span',{style:{fontWeight:400}},ev.myExtra))),
+              h('p',{style:{fontSize:11,color:T.sub,margin:'8px 0 0',lineHeight:1.5}},'Responses are final. If you need to change your response, please contact ',h('a',{href:'mailto:isummer@yonsei.ac.kr',style:{color:T.navy,fontWeight:600}},'isummer@yonsei.ac.kr'),'.'))
           :closed?
             h('div',{style:{padding:'10px 14px',background:'#f0f2f5',borderRadius:8,fontSize:13,fontWeight:600,color:T.sub}},'RSVP is closed.')
           :h('div',null,
@@ -567,10 +573,18 @@ function App(){
                   opt);
               })
             ),
-            h('div',{style:{display:'flex',justifyContent:'flex-end'}},
-              h('button',{onClick:function(){submit(ev)},disabled:busy||!picks[ev.id],
-                style:{padding:'9px 20px',background:(busy||!picks[ev.id])?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:(busy||!picks[ev.id])?'not-allowed':'pointer'}},
-                busy?'Submitting…':'Submit RSVP'))
+            ev.extraLabel&&h('div',{style:{marginBottom:12}},
+              h('label',{style:{fontSize:12,fontWeight:600,color:T.text,display:'block',marginBottom:6}},ev.extraLabel,ev.extraRequired&&h('span',{style:{color:T.red}},' *')),
+              h('input',{type:'text',value:extras[ev.id]||'',placeholder:'Type your answer…',onChange:function(e){var v=e.target.value;setExtras(function(p){return Object.assign({},p,(function(){var x={};x[ev.id]=v;return x;})())})},style:S(inputStyle(),{fontSize:13,padding:'8px 10px'})})
+            ),
+            (function(){
+              var missingExtra=ev.extraLabel&&ev.extraRequired&&!(extras[ev.id]||'').trim();
+              var disabled=busy||!picks[ev.id]||missingExtra;
+              return h('div',{style:{display:'flex',justifyContent:'flex-end'}},
+                h('button',{onClick:function(){submit(ev)},disabled:disabled,
+                  style:{padding:'9px 20px',background:disabled?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:disabled?'not-allowed':'pointer'}},
+                  busy?'Submitting…':'Submit RSVP'));
+            })()
           )
         );
       })
@@ -804,7 +818,7 @@ function App(){
       if(!editEvent||!editEvent.title){alert('Title is required.');return;}
       var options=(editEvent.optionsText||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);
       if(options.length===0){alert('Add at least one response option (one per line).');return;}
-      var payload={title:editEvent.title,datetime:editEvent.datetime||'',location:editEvent.location||'',description:editEvent.description||'',deadline:editEvent.deadline||'',audience:editEvent.audience||[],options:options};
+      var payload={title:editEvent.title,datetime:editEvent.datetime||'',location:editEvent.location||'',description:editEvent.description||'',deadline:editEvent.deadline||'',audience:editEvent.audience||[],options:options,extraLabel:(editEvent.extraLabel||'').trim(),extraRequired:!!editEvent.extraRequired&&!!(editEvent.extraLabel||'').trim()};
       var token=sessionStorage.getItem('portal_token');
       callApi('adminSaveEvent',{token:token,rowIndex:editEvent.rowIndex||null,event:payload}).then(function(res){
         if(res.expired){handleLogout();return;}
@@ -1009,12 +1023,18 @@ function App(){
                 h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},'Response options — one per line (응답 선택지, 한 줄에 하나)'),
                 h('textarea',{value:editEvent.optionsText||'',placeholder:'Attending\nNot attending',rows:4,onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{optionsText:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px',resize:'vertical',fontFamily:'monospace'})})
               ),
+              h('div',null,
+                h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},'Extra free-text question — optional (추가 자유입력 질문, 비우면 없음)'),
+                h('input',{type:'text',value:editEvent.extraLabel||'',placeholder:'e.g., Dietary restrictions / allergies (식이 제한·알레르기)',onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{extraLabel:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})}),
+                h('label',{style:{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,color:(editEvent.extraLabel||'').trim()?T.text:T.sub,cursor:(editEvent.extraLabel||'').trim()?'pointer':'not-allowed',marginTop:6}},
+                  h('input',{type:'checkbox',checked:!!editEvent.extraRequired,disabled:!(editEvent.extraLabel||'').trim(),onChange:function(e){var c=e.target.checked;setEditEvent(function(p){return Object.assign({},p,{extraRequired:c})})}}),'Required (필수 응답)')
+              ),
               h('div',{style:{display:'flex',gap:6,justifyContent:'flex-end'}},
                 h('button',{onClick:function(){setEditEvent(null)},style:{padding:'5px 12px',background:'#e5e7eb',color:T.text,border:'none',borderRadius:6,fontSize:12,fontFamily:'inherit',cursor:'pointer'}},'Cancel'),
                 h('button',{onClick:saveEvent,style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer'}},editEvent.rowIndex?'Update':'Add'))
             ):null,
             h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:8}},
-              !editEvent&&h('button',{onClick:function(){setEditEvent({title:'',datetime:'',location:'',description:'',deadline:'',audience:['OVERSEAS','DOMESTIC_FT','DOMESTIC_EXT'],optionsText:''})},style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}},'+  Add Event')
+              !editEvent&&h('button',{onClick:function(){setEditEvent({title:'',datetime:'',location:'',description:'',deadline:'',audience:['OVERSEAS','DOMESTIC_FT','DOMESTIC_EXT'],optionsText:'',extraLabel:'',extraRequired:false})},style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}},'+  Add Event')
             ),
             (eventsList||[]).length===0?h('p',{style:{fontSize:12,color:T.sub,textAlign:'center',padding:'8px 0'}},'No events yet.')
             :(eventsList||[]).map(function(ev){
@@ -1023,7 +1043,9 @@ function App(){
                   h('div',{style:{fontWeight:600,color:T.text}},ev.title),
                   h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},(ev.datetime||'—')+(ev.deadline?(' · RSVP by '+ev.deadline):''))
                 ),
-                h('span',{style:{fontSize:11,fontWeight:600,color:ev.responseCount>0?T.green:T.sub,whiteSpace:'nowrap'}},ev.responseCount+' resp.'),
+                ev.responseUrl
+                  ? h('a',{href:ev.responseUrl,target:'_blank',rel:'noopener',onClick:function(e){e.stopPropagation()},style:{fontSize:11,fontWeight:600,color:ev.responseCount>0?T.green:T.sub,whiteSpace:'nowrap',textDecoration:'none'},title:'Open responses in the spreadsheet'},ev.responseCount+' resp. ↗')
+                  : h('span',{style:{fontSize:11,fontWeight:600,color:T.sub,whiteSpace:'nowrap'}},ev.responseCount+' resp.'),
                 h('button',{onClick:function(){setEditEvent(Object.assign({},ev,{optionsText:(ev.options||[]).join('\n')}))},style:{background:'none',border:'none',color:T.navy,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Edit'),
                 h('button',{onClick:function(){deleteEvent(ev)},style:{background:'none',border:'none',color:T.red,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Delete')
               );
@@ -1445,12 +1467,14 @@ function App(){
         ),
         h('div',{style:{padding:'12px 14px',background:'#f8f9fb',borderRadius:8}},
           h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 10px',lineHeight:1.6}},
-            h('strong',{style:{color:T.text}},'Consent of Personal Information'),h('br'),
-            h('strong',null,'1. Purpose: '),'Signing/fulfillment of the employment contract, faculty personnel management, and personnel record management.',h('br'),
-            h('strong',null,'2. Personal Information Collected: '),'Full Name, Date of Birth, Passport No., Alien Registration No., Nationality, Telephone No., Mailing Address.',h('br'),h('br'),
-            h('em',null,'※ You have the right to reject the collection and use of personal information, but if you exercise this right you will not be able to be employed at the university.')
+            h('strong',{style:{color:T.text}},'Consent to Collection and Use of Personal Information (개인정보 수집·이용 동의)'),h('br'),h('br'),
+            h('strong',null,'1. Purpose / 목적: '),'Salary disbursement and overseas remittance processing, fulfillment of the employment contract, and faculty personnel and tax/withholding reporting. ',h('em',null,'급여 지급 및 외화송금 처리, 고용계약 이행, 교원 인사 및 세무·원천징수 신고.'),h('br'),h('br'),
+            h('strong',null,'2. Items Collected / 수집 항목: '),'Full Name, Date of Birth, Passport No. / Alien Registration No., Nationality, Telephone, Address, tax-residency information, and bank account details (beneficiary name, bank name, account number, branch, bank address, SWIFT / ABA). ',h('em',null,'성명, 생년월일, 여권번호/외국인등록번호, 국적, 전화번호, 주소, 세무상 거주 정보, 은행 계좌정보(예금주, 은행명, 계좌번호, 지점, 은행 주소, SWIFT/ABA).'),h('br'),h('br'),
+            h('strong',null,'3. Provision to Third Parties / 제3자 제공: '),'Bank account information is provided to financial institutions (remitting/receiving banks) solely to process the salary remittance. ',h('em',null,'계좌정보는 급여 송금 처리를 위해 금융기관(송금·수취 은행)에 제공됩니다.'),h('br'),h('br'),
+            h('strong',null,'4. Retention Period / 보유·이용 기간: '),'Retained for the period required by relevant laws (e.g., tax and accounting records), then destroyed. ',h('em',null,'관련 법령에서 정한 기간(예: 세무·회계 보존기간) 동안 보유 후 파기.'),h('br'),h('br'),
+            h('em',null,'※ You have the right to refuse consent. However, as this information is required to process your salary, refusal will make salary disbursement impossible. 본인은 동의를 거부할 권리가 있으나, 위 정보는 급여 처리를 위해 필요하므로 거부 시 급여 지급이 불가능합니다.')
           ),
-          fieldCheckbox({field:'consent',required:true,label:'I consent to the collection and use of my personal information as described above.',kr:'본인은 위와 같이 개인정보를 수집·이용하는 데 동의합니다.'})
+          fieldCheckbox({field:'consent',required:true,label:'I consent to the collection, use, and third-party provision of my personal information as described above.',kr:'본인은 위와 같이 개인정보를 수집·이용 및 제3자 제공하는 데 동의합니다.'})
         )
       ),
       formError && h('div',{style:{padding:'10px 14px',background:'#fef2f2',color:T.red,borderRadius:8,fontSize:13}},formError),
