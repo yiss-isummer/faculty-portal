@@ -89,6 +89,7 @@ var Icons = {
   admin: function(){return Ico({d:[{t:'path',d:'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2'},{t:'circle',cx:'9',cy:'7',r:'4'},{t:'path',d:'M23 21v-2a4 4 0 00-3-3.87'},{t:'path',d:'M16 3.13a4 4 0 010 7.75'}]})},
   send: function(){return Ico({d:[{t:'line',x1:'22',y1:'2',x2:'11',y2:'13'},{t:'polygon',points:'22 2 15 22 11 13 2 9 22 2'}],w:14,h:14})},
   salary: function(){return Ico({d:[{t:'rect',x:'2',y:'5',width:'20',height:'14',rx:'2'},{t:'line',x1:'2',y1:'10',x2:'22',y2:'10'},{t:'line',x1:'6',y1:'15',x2:'10',y2:'15'}]})},
+  events: function(){return Ico({d:[{t:'rect',x:'3',y:'4',width:'18',height:'18',rx:'2'},{t:'line',x1:'16',y1:'2',x2:'16',y2:'6'},{t:'line',x1:'8',y1:'2',x2:'8',y2:'6'},{t:'line',x1:'3',y1:'10',x2:'21',y2:'10'}]})},
 };
 // ── Mock Data (fallback for unconnected fields) ──
 var MOCK = {
@@ -301,6 +302,7 @@ function App(){
         {key:'courses',label:'My Courses',icon:Icons.courses},
         {key:'documents',label:'Documents',icon:Icons.documents},
         {key:'salary',label:'Salary',icon:Icons.salary},
+        {key:'events',label:'Events',icon:Icons.events},
         {key:'notices',label:'Notices',icon:Icons.notices},
       ].filter(function(t){ return !(isFT && t.key==='documents'); });  // 검수5: 전임은 Documents 숨김
 
@@ -496,6 +498,85 @@ function App(){
     );
   }
 
+  function EventsTab(){
+    var _e=useState(null),events=_e[0],setEvents=_e[1];
+    var _l=useState(true),loadingEv=_l[0],setLoadingEv=_l[1];
+    var _er=useState(''),evErr=_er[0],setEvErr=_er[1];
+    var _p=useState({}),picks=_p[0],setPicks=_p[1];          // eventId -> 선택(제출 전)
+    var _s=useState(null),submitting=_s[0],setSubmitting=_s[1]; // 제출 중인 eventId
+
+    function loadEvents(){
+      var token=sessionStorage.getItem('portal_token');
+      setLoadingEv(true);setEvErr('');
+      callApi('getEvents',{token:token}).then(function(res){
+        setLoadingEv(false);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){setEvErr(res.message||'Failed to load events.');return;}
+        setEvents(res.events||[]);
+      }).catch(function(){setLoadingEv(false);setEvErr('Network error.');});
+    }
+    useEffect(function(){loadEvents();},[]);
+
+    function submit(ev){
+      var choice=picks[ev.id];
+      if(!choice){alert('Please select a response.');return;}
+      if(!confirm('Submit "'+choice+'"?\n\nResponses cannot be changed after submitting.')) return;
+      var token=sessionStorage.getItem('portal_token');
+      setSubmitting(ev.id);
+      callApi('submitRsvp',{token:token,eventId:ev.id,response:choice}).then(function(res){
+        setSubmitting(null);
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message||'Submit failed.');return;}
+        loadEvents();
+      }).catch(function(){setSubmitting(null);alert('Network error.');});
+    }
+
+    return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
+      h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Events'),
+      loadingEv?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'Loading events…'))
+      :evErr?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.red,margin:0,textAlign:'center'}},evErr))
+      :(!events||events.length===0)?
+        h(Card,null,h('p',{style:{fontSize:13,color:T.sub,margin:0,textAlign:'center'}},'No events to RSVP at the moment.'))
+      :events.map(function(ev){
+        var busy=submitting===ev.id;
+        var responded=ev.myResponse!=null&&ev.myResponse!=='';
+        var closed=ev.deadlinePassed;
+        return h(Card,{key:ev.id},
+          h('h3',{style:{fontSize:16,fontWeight:700,color:T.text,margin:'0 0 8px'}},ev.title),
+          h('div',{style:{display:'flex',flexWrap:'wrap',gap:'4px 16px',fontSize:13,color:T.sub,marginBottom:10}},
+            ev.datetime&&h('span',null,'📅 '+ev.datetime),
+            ev.location&&h('span',null,'📍 '+ev.location),
+            ev.deadline&&h('span',{style:{color:closed?T.red:T.sub}},'RSVP by '+ev.deadline)
+          ),
+          ev.description&&h('p',{style:{fontSize:13,color:T.text,lineHeight:1.6,margin:'0 0 14px',whiteSpace:'pre-wrap'}},ev.description),
+          responded?
+            h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:T.greenL,borderRadius:8,fontSize:13,fontWeight:600,color:T.green}},
+              Icons.check(),' You responded: ',ev.myResponse)
+          :closed?
+            h('div',{style:{padding:'10px 14px',background:'#f0f2f5',borderRadius:8,fontSize:13,fontWeight:600,color:T.sub}},'RSVP is closed.')
+          :h('div',null,
+            h('div',{style:{display:'flex',flexDirection:'column',gap:8,marginBottom:12}},
+              (ev.options||[]).map(function(opt,oi){
+                var sel=picks[ev.id]===opt;
+                return h('button',{key:oi,onClick:function(){setPicks(function(p){return Object.assign({},p,(function(o){var x={};x[ev.id]=opt;return x;})())})},
+                  style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'1.5px solid '+(sel?T.navy:T.bdr),borderRadius:10,background:sel?'rgba(0,55,100,.05)':'#fff',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:sel?600:400,color:T.text,textAlign:'left'}},
+                  h('span',{style:{width:16,height:16,borderRadius:'50%',border:'2px solid '+(sel?T.navy:T.bdr),flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}},
+                    sel&&h('span',{style:{width:8,height:8,borderRadius:'50%',background:T.navy}})),
+                  opt);
+              })
+            ),
+            h('div',{style:{display:'flex',justifyContent:'flex-end'}},
+              h('button',{onClick:function(){submit(ev)},disabled:busy||!picks[ev.id],
+                style:{padding:'9px 20px',background:(busy||!picks[ev.id])?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:(busy||!picks[ev.id])?'not-allowed':'pointer'}},
+                busy?'Submitting…':'Submit RSVP'))
+          )
+        );
+      })
+    );
+  }
+
   function AdminTab(){
     var _r=useState(null),roster=_r[0],setRoster=_r[1];
     var _l=useState(true),loadingAdmin=_l[0],setLoadingAdmin=_l[1];
@@ -520,6 +601,10 @@ function App(){
     var _ll=useState(null),linksList=_ll[0],setLinksList=_ll[1];
     var _lld=useState(false),linksLoading=_lld[0],setLinksLoading=_lld[1];
     var _le=useState(null),editLink=_le[0],setEditLink=_le[1];
+    var _eo=useState(false),eventsOpen=_eo[0],setEventsOpen=_eo[1];
+    var _evl=useState(null),eventsList=_evl[0],setEventsList=_evl[1];
+    var _evd=useState(false),eventsLoading=_evd[0],setEventsLoading=_evd[1];
+    var _eve=useState(null),editEvent=_eve[0],setEditEvent=_eve[1];
 
     function loadRoster(){
       var token=sessionStorage.getItem('portal_token');
@@ -692,6 +777,51 @@ function App(){
       }).catch(function(){alert('Network error.');});
     }
 
+    // ── Events (RSVP) ──
+    var CATEGORY_OPTS=[{code:'OVERSEAS',label:'해외 / Overseas'},{code:'DOMESTIC_FT',label:'국내(전임) / Domestic FT'},{code:'DOMESTIC_EXT',label:'국내(외부) / Domestic Ext'}];
+    function loadEvents(){
+      setEventsLoading(true);
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminListEvents',{token:token}).then(function(res){
+        setEventsLoading(false);
+        if(res.expired){handleLogout();return;}
+        if(res.success) setEventsList(res.events||[]);
+      }).catch(function(){setEventsLoading(false);});
+    }
+    function toggleEvents(){
+      if(eventsOpen){setEventsOpen(false);return;}
+      setEventsOpen(true);
+      if(!eventsList) loadEvents();
+    }
+    function toggleAudience(code){
+      setEditEvent(function(p){
+        var a=(p.audience||[]).slice(); var i=a.indexOf(code);
+        if(i===-1) a.push(code); else a.splice(i,1);
+        return Object.assign({},p,{audience:a});
+      });
+    }
+    function saveEvent(){
+      if(!editEvent||!editEvent.title){alert('Title is required.');return;}
+      var options=(editEvent.optionsText||'').split('\n').map(function(s){return s.trim();}).filter(Boolean);
+      if(options.length===0){alert('Add at least one response option (one per line).');return;}
+      var payload={title:editEvent.title,datetime:editEvent.datetime||'',location:editEvent.location||'',description:editEvent.description||'',deadline:editEvent.deadline||'',audience:editEvent.audience||[],options:options};
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminSaveEvent',{token:token,rowIndex:editEvent.rowIndex||null,event:payload}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        setEditEvent(null);loadEvents();
+      }).catch(function(){alert('Network error.');});
+    }
+    function deleteEvent(ev){
+      if(!confirm('Delete "'+ev.title+'"?\n\nThe event is removed, but its response tab (with '+ev.responseCount+' response(s)) is kept in the spreadsheet.')) return;
+      var token=sessionStorage.getItem('portal_token');
+      callApi('adminDeleteEvent',{token:token,rowIndex:ev.rowIndex}).then(function(res){
+        if(res.expired){handleLogout();return;}
+        if(!res.success){alert(res.message);return;}
+        loadEvents();
+      }).catch(function(){alert('Network error.');});
+    }
+
     function openSalaryDetail(eid){
       if(selEid===eid){setSelEid(null);setSalaryDetail(null);return;}
       setSelEid(eid);setSalaryDetail(null);setSdLoading(true);
@@ -840,6 +970,62 @@ function App(){
                 lk.url&&h('a',{href:lk.url,target:'_blank',rel:'noopener',onClick:function(e){e.stopPropagation()},style:{fontSize:11,color:T.navy,whiteSpace:'nowrap'}},'Open ↗'),
                 h('button',{onClick:function(){setEditLink(Object.assign({},lk))},style:{background:'none',border:'none',color:T.navy,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Edit'),
                 h('button',{onClick:function(){deleteLink(lk.rowIndex)},style:{background:'none',border:'none',color:T.red,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Delete')
+              );
+            })
+          ):null
+        )
+      ),
+      // ── Events (RSVP) Management ──
+      h(Card,{style:{padding:0,overflow:'hidden'}},
+        h('div',{onClick:toggleEvents,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 16px',cursor:'pointer',background:eventsOpen?'#f8f9fb':'#fff'}},
+          h('span',{style:{fontSize:14,fontWeight:700,color:T.navy}},'📅 Events (RSVP)'),
+          h('span',{style:{fontSize:14,color:T.sub,transform:eventsOpen?'rotate(180deg)':'none',transition:'transform .2s'}},'▾')
+        ),
+        eventsOpen&&h('div',{style:{padding:'0 16px 16px'}},
+          eventsLoading?h('p',{style:{fontSize:12,color:T.sub,margin:'8px 0 0'}},'Loading…')
+          :eventsList?h('div',{style:{marginTop:8}},
+            editEvent?h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:'12px',background:'#f8f9fb',borderRadius:8,marginBottom:10}},
+              h('input',{type:'text',value:editEvent.title||'',placeholder:'Title * (행사명)',onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{title:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px'})}),
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('input',{type:'text',value:editEvent.datetime||'',placeholder:'Date & time (e.g., 2026-07-01 18:00)',onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{datetime:e.target.value})})},style:S(inputStyle(),{flex:'2 1 200px',fontSize:12,padding:'6px 10px'})}),
+                h('input',{type:'text',value:editEvent.location||'',placeholder:'Location (장소)',onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{location:e.target.value})})},style:S(inputStyle(),{flex:'1 1 140px',fontSize:12,padding:'6px 10px'})})
+              ),
+              h('div',null,
+                h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},'RSVP deadline (마감일)'),
+                h('input',{type:'date',value:editEvent.deadline||'',onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{deadline:e.target.value})})},style:S(inputStyle(),{flex:'0 0 140px',fontSize:12,padding:'6px 10px'})})
+              ),
+              h('textarea',{value:editEvent.description||'',placeholder:'Description (설명)',rows:2,onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{description:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px',resize:'vertical'})}),
+              h('div',null,
+                h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},'Audience — who can see this (대상 분류)'),
+                h('div',{style:{display:'flex',flexWrap:'wrap',gap:'4px 14px'}},
+                  CATEGORY_OPTS.map(function(c){
+                    return h('label',{key:c.code,style:{display:'inline-flex',alignItems:'center',gap:5,fontSize:12,color:T.text,cursor:'pointer'}},
+                      h('input',{type:'checkbox',checked:(editEvent.audience||[]).indexOf(c.code)!==-1,onChange:function(){toggleAudience(c.code)}}),c.label);
+                  })
+                ),
+                h('p',{style:{fontSize:10,color:T.sub,margin:'4px 0 0'}},'None checked = visible to everyone.')
+              ),
+              h('div',null,
+                h('label',{style:{fontSize:11,fontWeight:600,color:T.sub,display:'block',marginBottom:4}},'Response options — one per line (응답 선택지, 한 줄에 하나)'),
+                h('textarea',{value:editEvent.optionsText||'',placeholder:'Attending\nNot attending',rows:4,onChange:function(e){setEditEvent(function(p){return Object.assign({},p,{optionsText:e.target.value})})},style:S(inputStyle(),{fontSize:12,padding:'6px 10px',resize:'vertical',fontFamily:'monospace'})})
+              ),
+              h('div',{style:{display:'flex',gap:6,justifyContent:'flex-end'}},
+                h('button',{onClick:function(){setEditEvent(null)},style:{padding:'5px 12px',background:'#e5e7eb',color:T.text,border:'none',borderRadius:6,fontSize:12,fontFamily:'inherit',cursor:'pointer'}},'Cancel'),
+                h('button',{onClick:saveEvent,style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer'}},editEvent.rowIndex?'Update':'Add'))
+            ):null,
+            h('div',{style:{display:'flex',justifyContent:'flex-end',marginBottom:8}},
+              !editEvent&&h('button',{onClick:function(){setEditEvent({title:'',datetime:'',location:'',description:'',deadline:'',audience:['OVERSEAS','DOMESTIC_FT','DOMESTIC_EXT'],optionsText:''})},style:{padding:'5px 12px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4}},'+  Add Event')
+            ),
+            (eventsList||[]).length===0?h('p',{style:{fontSize:12,color:T.sub,textAlign:'center',padding:'8px 0'}},'No events yet.')
+            :(eventsList||[]).map(function(ev){
+              return h('div',{key:ev.rowIndex,style:{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid '+T.bdr,fontSize:13}},
+                h('div',{style:{flex:1,minWidth:0}},
+                  h('div',{style:{fontWeight:600,color:T.text}},ev.title),
+                  h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},(ev.datetime||'—')+(ev.deadline?(' · RSVP by '+ev.deadline):''))
+                ),
+                h('span',{style:{fontSize:11,fontWeight:600,color:ev.responseCount>0?T.green:T.sub,whiteSpace:'nowrap'}},ev.responseCount+' resp.'),
+                h('button',{onClick:function(){setEditEvent(Object.assign({},ev,{optionsText:(ev.options||[]).join('\n')}))},style:{background:'none',border:'none',color:T.navy,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Edit'),
+                h('button',{onClick:function(){deleteEvent(ev)},style:{background:'none',border:'none',color:T.red,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Delete')
               );
             })
           ):null
@@ -1279,7 +1465,7 @@ function App(){
     );
   }
 
-  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab,admin:AdminTab,salary:SalaryTab};
+  var tabContent={dashboard:DashboardTab,courses:CoursesTab,documents:DocumentsTab,notices:NoticesTab,admin:AdminTab,salary:SalaryTab,events:EventsTab};
 
   return h('div',{style:{minHeight:'100vh',background:T.bg,fontFamily:"'Noto Sans',-apple-system,sans-serif"}},
     fadeStyle,
