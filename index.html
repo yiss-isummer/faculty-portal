@@ -105,19 +105,22 @@ var MOCK = {
   resources:[],
   salary:{submitted:false,open:true,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
   flight:{eligible:false,files:[]},
+  events:[],
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
 function loadPortalData(token){
   return Promise.all([
     callApi('getDashboard',{token:token}),
-    callApi('getNotices',{token:token})
+    callApi('getNotices',{token:token}),
+    callApi('getEvents',{token:token})
   ]).then(function(results){
-    var dash=results[0], nx=results[1];
-    if(dash.expired||nx.expired) return null;
+    var dash=results[0], nx=results[1], ex=results[2];
+    if(dash.expired||nx.expired||(ex&&ex.expired)) return null;
     if(!dash.success) return null;
     return Object.assign({},MOCK,dash.faculty,{
       notices:(nx.success&&nx.notices)?nx.notices:[],
+      events:(ex&&ex.success&&ex.events)?ex.events:[],
       documents: dash.documents || MOCK.documents,
       courses: dash.courses || MOCK.courses,
       housing: dash.housing || MOCK.housing,
@@ -338,6 +341,12 @@ function App(){
           if(salaryOpen && faculty.flight && faculty.flight.eligible && !(faculty.flight.files||[]).length){
             actions.push({key:'flight',label:'Upload flight reimbursement documents (e-ticket receipt, boarding pass, etc.)',tab:'salary'});
           }
+          (faculty.events||[]).forEach(function(ev){
+            var responded=ev.myResponse!=null&&ev.myResponse!=='';
+            if(!ev.deadlinePassed && !responded){
+              actions.push({key:'rsvp_'+ev.id,label:'RSVP for "'+ev.title+'"'+(ev.deadline?(' (by '+ev.deadline+')'):''),tab:'events'});
+            }
+          });
           if(actions.length===0){
             return h('div',{style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:T.greenL,borderRadius:8}},
               h('span',{style:{color:T.green}},Icons.check()),h('span',{style:{fontSize:13,color:T.green,fontWeight:500}},'All tasks completed!'));
@@ -533,6 +542,8 @@ function App(){
         if(res.expired){handleLogout();return;}
         if(!res.success){alert(res.message||'Submit failed.');return;}
         loadEvents();
+        // 대시보드 Action Required와 동기화 (전체 재로드 없이 해당 행사만 응답 처리)
+        setFaculty(function(prev){return prev?Object.assign({},prev,{events:(prev.events||[]).map(function(e){return e.id===ev.id?Object.assign({},e,{myResponse:choice,myExtra:extraVal}):e;})}):prev;});
       }).catch(function(){setSubmitting(null);alert('Network error.');});
     }
 
