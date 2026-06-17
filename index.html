@@ -103,7 +103,7 @@ var MOCK = {
   },
   housing:{applicable:false},
   resources:[],
-  salary:{submitted:false,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
+  salary:{submitted:false,open:true,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
   flight:{eligible:false,files:[]},
 };
 
@@ -292,6 +292,7 @@ function App(){
   // ── PORTAL ──
   // 교원 분류 (G2): 'DOMESTIC_FT' = 국내(전임). 해외/국내(외부)는 기존 동작.
   var isFT = faculty.category==='DOMESTIC_FT';
+  var salaryOpen = !(faculty.salary && faculty.salary.open===false);  // salary_open=N 이면 Salary 탭 숨김 (소프트 오픈)
   var tabs = faculty.isAdmin===true
     ? [
         {key:'admin',label:'Admin',icon:Icons.admin},
@@ -304,7 +305,8 @@ function App(){
         {key:'salary',label:'Salary',icon:Icons.salary},
         {key:'events',label:'Events',icon:Icons.events},
         {key:'notices',label:'Notices',icon:Icons.notices},
-      ].filter(function(t){ return !(isFT && t.key==='documents'); });  // 검수5: 전임은 Documents 숨김
+      ].filter(function(t){ return !(isFT && t.key==='documents'); })  // 검수5: 전임은 Documents 숨김
+       .filter(function(t){ return !(t.key==='salary' && !salaryOpen); });  // salary_open=N 이면 숨김
 
   function DashboardTab(){
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
@@ -330,10 +332,10 @@ function App(){
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
             actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
-          if(!isFT && faculty.salary && !faculty.salary.submitted){
+          if(salaryOpen && !isFT && faculty.salary && !faculty.salary.submitted){
             actions.push({key:'salary',label:'Submit salary disbursement form'+(faculty.salary.deadline?(' (by '+faculty.salary.deadline+')'):''),tab:'salary'});
           }
-          if(faculty.flight && faculty.flight.eligible && !(faculty.flight.files||[]).length){
+          if(salaryOpen && faculty.flight && faculty.flight.eligible && !(faculty.flight.files||[]).length){
             actions.push({key:'flight',label:'Upload flight reimbursement documents (e-ticket receipt, boarding pass, etc.)',tab:'salary'});
           }
           if(actions.length===0){
@@ -907,6 +909,13 @@ function App(){
         settingsOpen&&h('div',{style:{padding:'0 16px 16px'}},
           ssLoading?h('p',{style:{fontSize:12,color:T.sub,margin:'8px 0 0'}},'Loading…')
           :salarySettings?h('div',null,
+            h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',margin:'8px 0 6px',background:(salarySettings.salary_open==='N')?'#fef2f2':T.greenL,borderRadius:8}},
+              h('div',null,
+                h('div',{style:{fontSize:13,fontWeight:700,color:(salarySettings.salary_open==='N')?T.red:T.green}},(salarySettings.salary_open==='N')?'Salary form: HIDDEN from faculty':'Salary form: VISIBLE to faculty'),
+                h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},'교원 Salary 탭 노출 여부. 변경 후 Save Settings를 눌러야 적용됩니다.')),
+              h('select',{value:salarySettings.salary_open==='N'?'N':'Y',onChange:function(e){var v=e.target.value;setSalarySettings(function(prev){var n=Object.assign({},prev);n.salary_open=v;return n;})},style:S(inputStyle(),{flex:'0 0 110px',width:'auto',fontSize:13,padding:'6px 8px'})},
+                h('option',{value:'Y'},'Open'),h('option',{value:'N'},'Closed'))
+            ),
             h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:'0 16px',marginTop:8}},
               ssField('Deadline','salary_deadline','e.g., 2026-06-12'),
               ssField('Year Label','salary_year_label','e.g., 2026 YISS'),
