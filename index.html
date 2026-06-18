@@ -1315,7 +1315,7 @@ function App(){
     var payments = salary.payments || {courses:[],total:'',hasData:false};
     var courseLabel = function(i,n){ if(n<=1) return 'Payment Amount'; var ord=['1st','2nd','3rd','4th','5th']; return (ord[i]||((i+1)+'th'))+' Course'; };
     var paymentCard = payments.hasData && h(Card,null,
-        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 12px'}},'💰 Your Payment Amount'),
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 12px'}},'💰 Your Payment Amount (Contract-Based)'),
         h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
           payments.courses.map(function(p,i){
             return h('div',{key:i,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<payments.courses.length-1||payments.total?'1px solid '+T.bdr:'none',fontSize:14}},
@@ -1325,7 +1325,9 @@ function App(){
           payments.total && h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0 0',fontSize:14}},
             h('span',{style:{color:T.navy,fontWeight:700}},'Total'),
             h('span',{style:{color:T.navy,fontWeight:700,fontFamily:'monospace'}},payments.total))
-        )
+        ),
+        h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'12px 0 0',lineHeight:1.5}},
+          'The amount above reflects your contract-based course payment only. Your final disbursement may differ, as enrollment-based incentives and other adjustments are applied separately. / 위 금액은 계약 기준 강의료이며, 최종 지급액은 수강인원별 추가지급 등 인센티브가 별도로 반영되어 달라질 수 있습니다.')
       );
     // 수강인원별 추가지급 안내 (강의료 관련 — 전임 포함 모든 교원에게 표시).
     var enrollmentCard = h(Card,null,
