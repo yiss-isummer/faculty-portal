@@ -1475,10 +1475,10 @@ function App(){
         h('div',{style:{margin:'8px 0 14px',padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
           h('strong',{style:{color:T.text}},'Personal Address (for remittance form)'),h('br'),
           'This appears on the bank remittance application as the beneficiary’s address. / 외화송금신청서에 수취인 주소로 기재됩니다.'),
-        fieldText({label:'Personal Address (St., Ave, Chome)',kr:'개인 주소 (도로명 등 상세주소)',field:'streetAddress',required:true}),
-        fieldText({label:'Personal Town Location (District)',kr:'개인 주소 소재지 (구/지역)',field:'region',required:true}),
-        fieldText({label:'Personal Town Name (City, Town)',kr:'개인 주소 도시',field:'city',required:true}),
-        fieldText({label:'Personal Address Country',kr:'개인 주소 국가',field:'mailingCountry',required:true})
+        fieldText({label:'Personal Address (Street / detailed address)',kr:'개인 주소 — 도로명·번지 등 상세주소',field:'streetAddress',required:true,placeholder:'e.g., 50 Yonsei-ro / 123 Main St, Apt 4'}),
+        fieldText({label:'Personal Town Location (District / Ward)',kr:'개인 주소 소재지 — 구·자치구',field:'region',required:true,placeholder:'e.g., Seodaemun-gu / Manhattan'}),
+        fieldText({label:'Personal Town Name (City)',kr:'개인 주소 도시',field:'city',required:true,placeholder:'e.g., Seoul / New York'}),
+        fieldText({label:'Personal Address Country',kr:'개인 주소 국가',field:'mailingCountry',required:true,placeholder:'e.g., Republic of Korea / United States'})
       ),
       h(Card,null,
         sectionHead('Section 4. Consent of Personal Information (개인정보 수집·이용 동의)'),
