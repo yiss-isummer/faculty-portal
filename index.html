@@ -408,6 +408,7 @@ function App(){
           c.time && ['Time', c.time],
           c.days && ['Days', c.days],
           c.location && ['Location', c.location],
+          c.enrollment && ['Enrollment', c.enrollment],
         ].filter(Boolean);
         return h(Card,{key:i},
           h('div',{style:{marginBottom:12}},
