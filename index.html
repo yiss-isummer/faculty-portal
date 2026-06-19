@@ -421,7 +421,15 @@ function App(){
             h('div',null,
               h('a',{href:c.syllabusLink,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600,width:'fit-content'}},Icons.download(),' View Syllabus'),
               h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Note: This syllabus is the version posted on the YISS course list. It is not synced with the Yonsei Portal System (학사포탈). If revisions are needed, they must also be made in the Portal System.'))
-          :h('span',{style:{fontSize:12,color:T.sub,fontStyle:'italic'}},'Syllabus not yet available')
+          :h('span',{style:{fontSize:12,color:T.sub,fontStyle:'italic'}},'Syllabus not yet available'),
+          c.tas && c.tas.length>0 && h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:T.navy,marginBottom:8}},'Teaching Assistant'+(c.tas.length>1?'s':'')),
+            c.tas.map(function(ta,k){
+              var line=[ta.name,ta.affiliation].filter(Boolean).join(' · ');
+              return h('div',{key:k,style:{fontSize:12,color:T.sub,marginBottom:k<c.tas.length-1?6:0}},
+                line?h('span',{style:{color:T.text,fontWeight:600}},line):null,
+                ta.email?h('span',null,(line?' — ':'')+ta.email):null);
+            }))
         );
       })
     );
