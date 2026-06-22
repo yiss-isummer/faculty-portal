@@ -14,3 +14,9 @@ Faculty Portal 검수.docx
 검수_*.md
 외화송금_*.md
 YISS_Portal_Guide_Test_*.docx
+
+# 내부 문서 (public repo 비공개 — 로컬 유지)
+CLAUDE.md
+PORTAL_DEV_GUIDE.md
+FACULTY_PORTAL_USER_GUIDE.md
+YISS_Faculty_Portal_Guideline_KO_EN.pdf
