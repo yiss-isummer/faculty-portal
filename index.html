@@ -90,6 +90,8 @@ var Icons = {
   send: function(){return Ico({d:[{t:'line',x1:'22',y1:'2',x2:'11',y2:'13'},{t:'polygon',points:'22 2 15 22 11 13 2 9 22 2'}],w:14,h:14})},
   salary: function(){return Ico({d:[{t:'rect',x:'2',y:'5',width:'20',height:'14',rx:'2'},{t:'line',x1:'2',y1:'10',x2:'22',y2:'10'},{t:'line',x1:'6',y1:'15',x2:'10',y2:'15'}]})},
   events: function(){return Ico({d:[{t:'rect',x:'3',y:'4',width:'18',height:'18',rx:'2'},{t:'line',x1:'16',y1:'2',x2:'16',y2:'6'},{t:'line',x1:'8',y1:'2',x2:'8',y2:'6'},{t:'line',x1:'3',y1:'10',x2:'21',y2:'10'}]})},
+  chevL: function(){return Ico({d:[{t:'polyline',points:'15 18 9 12 15 6'}],w:16,h:16})},
+  chevR: function(){return Ico({d:[{t:'polyline',points:'9 18 15 12 9 6'}],w:16,h:16})},
 };
 // ── Mock Data (fallback for unconnected fields) ──
 var MOCK = {
@@ -106,6 +108,7 @@ var MOCK = {
   salary:{submitted:false,open:true,submittedAt:'',updatedAt:'',deadline:'',yearLabel:'2026 YISS',payment4w:'',payment6w:'',contactEmail:'isummer@yonsei.ac.kr',payments:{courses:[],total:'',hasData:false},data:{}},
   flight:{eligible:false,files:[]},
   events:[],
+  calendar:[],
 };
 
 // 대시보드 + 공지를 동시에 로드해서 faculty state로 머지될 객체 반환 (실패 시 null)
@@ -127,6 +130,7 @@ function loadPortalData(token){
       resources: dash.resources || MOCK.resources,
       salary: dash.salary || MOCK.salary,
       flight: dash.flight || MOCK.flight,
+      calendar: dash.calendar || MOCK.calendar,
     });
   });
 }
@@ -143,6 +147,19 @@ function Badge(props){
   var s=m[props.status]||m.pending;
   return h('span',{style:{display:'inline-flex',alignItems:'center',gap:4,padding:'4px 10px',borderRadius:20,fontSize:12,fontWeight:600,background:s.bg,color:s.c}},
     (props.status==='signed'||props.status==='submitted')?Icons.check():Icons.clock(),' ',s.t);
+}
+
+// ── Program Calendar helpers ──
+var CAL_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function calFmt(y,m,d){return y+'-'+('0'+m).slice(-2)+'-'+('0'+d).slice(-2)}
+function calLabel(s){var p=s.split('-');return CAL_MONTHS[+p[1]-1]+' '+(+p[2])}
+// RSVP 행사 일시(자유 텍스트) → YYYY-MM-DD 베스트에포트 파싱. 실패 시 null(달력에서 제외).
+function calParseFree(s){
+  if(!s)return null;
+  var m=String(s).match(/(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})/);
+  if(m)return calFmt(+m[1],+m[2],+m[3]);
+  var d=new Date(s);
+  return(!isNaN(d.getTime())&&d.getFullYear()>=2020&&d.getFullYear()<=2100)?calFmt(d.getFullYear(),d.getMonth()+1,d.getDate()):null;
 }
 
 // ── Main App ──
@@ -311,6 +328,86 @@ function App(){
       ].filter(function(t){ return !(isFT && t.key==='documents'); })  // 검수5: 전임은 Documents 숨김
        .filter(function(t){ return !(t.key==='salary' && !salaryOpen); });  // salary_open=N 이면 숨김
 
+  // Dashboard 달력: PortalCalendar 일정(navy) + RSVP 행사(gold, 날짜 파싱 가능한 것만).
+  // 데이터가 하나도 없으면 카드 자체를 숨김. 월 이동 자유 — 연도 하드코딩 없음.
+  function CalendarCard(){
+    var _ym=useState(null),ymOv=_ym[0],setYm=_ym[1];     // 'YYYY-MM' — null이면 기본 월
+    var _sd=useState(null),selDay=_sd[0],setSelDay=_sd[1]; // 선택된 날짜 'YYYY-MM-DD'
+    var entries=(faculty.calendar||[]).map(function(c){
+      return {start:c.start,end:(c.end&&c.end>c.start)?c.end:null,title:c.title,description:c.description||'',rsvp:false};
+    });
+    (faculty.events||[]).forEach(function(ev){
+      var d=calParseFree(ev.datetime);
+      if(d)entries.push({start:d,end:null,title:ev.title,description:[ev.datetime,ev.location].filter(Boolean).join(' · '),rsvp:true});
+    });
+    if(entries.length===0)return null;
+    entries.sort(function(a,b){return a.start<b.start?-1:1});
+
+    var now=new Date(),todayS=calFmt(now.getFullYear(),now.getMonth()+1,now.getDate());
+    var minYm=entries[0].start.slice(0,7);
+    var maxYm=entries.reduce(function(mx,e){var v=(e.end||e.start).slice(0,7);return v>mx?v:mx},minYm);
+    var defYm=todayS.slice(0,7);if(defYm<minYm)defYm=minYm;if(defYm>maxYm)defYm=maxYm;
+    var ym=ymOv||defYm;
+    var y=+ym.slice(0,4),mo=+ym.slice(5,7);
+    var dim=new Date(y,mo,0).getDate(),fdow=new Date(y,mo-1,1).getDay();
+    var first=calFmt(y,mo,1),last=calFmt(y,mo,dim);
+
+    function covers(e,dateS){return e.end?(e.start<=dateS&&dateS<=e.end):e.start===dateS}
+    var monthEntries=entries.filter(function(e){return e.start<=last&&(e.end||e.start)>=first});
+    var listEntries=selDay?entries.filter(function(e){return covers(e,selDay)}):monthEntries;
+    function nav(delta){
+      var m2=mo+delta,y2=y;
+      if(m2<1){m2=12;y2--}if(m2>12){m2=1;y2++}
+      setYm(y2+'-'+('0'+m2).slice(-2));setSelDay(null);
+    }
+    var navBtn={background:'none',border:'1px solid '+T.bdr,borderRadius:6,width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.sub,padding:0};
+    var cells=[];
+    for(var b=0;b<fdow;b++)cells.push(null);
+    for(var d=1;d<=dim;d++)cells.push(d);
+
+    return h(Card,null,
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8}},
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📅 Program Calendar'),
+        h('div',{style:{display:'flex',alignItems:'center',gap:4}},
+          h('button',{onClick:function(){nav(-1)},style:navBtn},Icons.chevL()),
+          h('span',{style:{fontSize:13,fontWeight:700,color:T.text,minWidth:80,textAlign:'center'}},CAL_MONTHS[mo-1]+' '+y),
+          h('button',{onClick:function(){nav(1)},style:navBtn},Icons.chevR()))),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:2}},
+        ['S','M','T','W','T','F','S'].map(function(w,i){
+          return h('div',{key:i,style:{textAlign:'center',fontSize:10,fontWeight:700,color:T.sub,padding:'4px 0'}},w);
+        })),
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}},
+        cells.map(function(d,i){
+          if(d===null)return h('div',{key:'b'+i});
+          var dateS=calFmt(y,mo,d);
+          var dayEv=monthEntries.filter(function(e){return covers(e,dateS)});
+          var hasSingle=dayEv.some(function(e){return !e.end});
+          var inRange=dayEv.some(function(e){return e.end});
+          var isSel=selDay===dateS,isToday=dateS===todayS;
+          var dotColor=isSel?'#fff':dayEv.some(function(e){return !e.end&&!e.rsvp})?T.navy:T.gold;
+          return h('div',{key:dateS,onClick:function(){setSelDay(dayEv.length&&selDay!==dateS?dateS:null)},style:{
+            textAlign:'center',padding:'5px 0 3px',borderRadius:8,minHeight:34,
+            cursor:dayEv.length?'pointer':'default',
+            background:isSel?T.navy:inRange?'rgba(0,55,100,.07)':'transparent',
+            border:isToday&&!isSel?'1.5px solid '+T.gold:'1.5px solid transparent'}},
+            h('div',{style:{fontSize:12,fontWeight:(isToday||isSel)?700:400,color:isSel?'#fff':T.text,lineHeight:'16px'}},d),
+            h('div',{style:{height:6,display:'flex',justifyContent:'center'}},
+              hasSingle&&h('span',{style:{width:4,height:4,borderRadius:2,background:dotColor,marginTop:1}})));
+        })),
+      h('div',{style:{marginTop:12,borderTop:'1px solid '+T.bdr,paddingTop:10}},
+        listEntries.length===0
+          ?h('p',{style:{fontSize:12,color:T.sub,fontStyle:'italic',margin:0}},'No scheduled dates this month.')
+          :listEntries.map(function(e,i){
+            var when=e.end?calLabel(e.start)+' – '+calLabel(e.end):calLabel(e.start);
+            return h('div',{key:i,onClick:e.rsvp?function(){setTab('events')}:undefined,style:{display:'flex',gap:10,padding:'7px 0',borderBottom:i<listEntries.length-1?'1px solid '+T.bdr:'none',cursor:e.rsvp?'pointer':'default',alignItems:'baseline'}},
+              h('span',{style:{fontSize:11,fontWeight:700,color:e.rsvp?T.gold:T.navy,whiteSpace:'nowrap',minWidth:78}},when),
+              h('div',{style:{flex:1,minWidth:0}},
+                h('div',{style:{fontSize:13,fontWeight:600,color:T.text}},e.title,e.rsvp&&h('span',{style:{fontSize:10,fontWeight:700,color:T.gold,marginLeft:6}},'RSVP →')),
+                e.description?h('div',{style:{fontSize:11,color:T.sub,marginTop:1,lineHeight:1.4}},e.description):null));
+          }))
+    );
+  }
+
   function DashboardTab(){
     var programResources = (faculty.resources||[]).filter(function(r){ return !({invitationLetter:1,businessRegistration:1})[r.key]; });
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
@@ -365,6 +462,7 @@ function App(){
           });
         })()
       ),
+      h(CalendarCard),
       faculty.housing&&faculty.housing.applicable&&h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:8,flexWrap:'wrap'}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'🏠 Stay at Somerset Palace'),
@@ -421,7 +519,7 @@ function App(){
           c.syllabusLink?
             h('div',null,
               h('a',{href:c.syllabusLink,target:'_blank',rel:'noopener noreferrer',style:{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'rgba(0,55,100,.06)',color:T.navy,textDecoration:'none',borderRadius:8,fontSize:13,fontWeight:600,width:'fit-content'}},Icons.download(),' View Syllabus'),
-              h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Note: This syllabus is the version posted on the YISS course list. It is not synced with the Yonsei Portal System (학사포탈). If revisions are needed, they must also be made in the Portal System.'))
+              h('p',{style:{fontSize:11,color:T.sub,fontStyle:'italic',margin:'8px 0 0',lineHeight:1.5}},'Note: This syllabus is the version posted on the YISS website (http://summer.yonsei.ac.kr) Course list section. It is not synced with the Yonsei Portal System (연세학사포탈: http://portal.yonsei.ac.kr). If revisions are needed, they must also be made to the Yonsei Portal System.'))
           :h('span',{style:{fontSize:12,color:T.sub,fontStyle:'italic'}},'Syllabus not yet available'),
           c.tas && c.tas.length>0 && h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
             h('div',{style:{fontSize:12,fontWeight:700,color:T.navy,marginBottom:8}},'Teaching Assistant'+(c.tas.length>1?'s':'')),
@@ -1191,8 +1289,7 @@ function App(){
   function SalaryTab(){
     var salary = faculty.salary || MOCK.salary;
     var _initData = Object.assign({},salary.data||{});
-    // 검수8: 거주/비거주 판별자는 별도 컬럼 없이 UI 상태로만 관리.
-    // 제출분 재방문 시 기존 은행데이터로 추론(해외 전용 필드가 채워져 있으면 비거주자).
+    // 거주/비거주 선택값은 RESIDENCY_STATUS 컬럼에 저장됨. 옛 제출분(컬럼 도입 전)만 기존 은행데이터로 추론(폴백).
     if(!_initData.residencyStatus && salary.submitted){
       var _foreignFilled = ['branchName','bankAddress','abaNo','swiftCode','country','bankTownLocation','bankTownName'].some(function(k){
         var v=String(_initData[k]||'').trim(); return v && v.toUpperCase()!=='N/A';
@@ -1301,7 +1398,7 @@ function App(){
       );
     }
 
-    // 검수8: 거주자/비거주자 선택 (Section 3 노출 트리거 + 기록용, UI 상태 전용 — 컬럼 미저장).
+    // 거주자/비거주자 선택 (Section 3 노출 트리거 + RESIDENCY_STATUS 컬럼에 저장).
     function residencySelector(){
       var val = form.residencyStatus || '';
       function opt(value, en, kr){
