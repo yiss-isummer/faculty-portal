@@ -474,7 +474,10 @@ function App(){
             actions.push({key:'contract',label:'Sign your employment contract — check your email for the signing link and all related documents.',link:faculty.documents.contract.link,tab:'documents'});
           }
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
-            actions.push({key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
+            // 포털 업로드 방식이면 외부 링크가 없으므로 Documents 탭으로 보낸다.
+            actions.push(faculty.documents.reappointment.mode==='portal'
+              ?{key:'reappointment',label:'Submit reappointment documents',tab:'documents'}
+              :{key:'reappointment',label:'Submit reappointment documents',link:faculty.documents.reappointment.link});
           }
           if(salaryOpen && !isFT && faculty.salary && !faculty.salary.submitted){
             actions.push({key:'salary',label:'Submit salary disbursement form'+(faculty.salary.deadline?(' (by '+faculty.salary.deadline+')'):''),tab:'salary'});
@@ -580,6 +583,59 @@ function App(){
   function DocumentsTab(){
     var contractDocKeys = {invitationLetter:1, businessRegistration:1};
     var contractDocs = (faculty.resources||[]).filter(function(r){return contractDocKeys[r.key]});
+
+    // 재임용 서류 — REAPPOINTMENT_MODE='portal'이면 포털에서 직접 업로드받는다(동계~).
+    // 'external'이면 기존처럼 외부 재임용 웹앱으로 링크만 건다(하계).
+    var reapp = faculty.documents.reappointment || {};
+    var _rd=useState(reapp.docTypes||[]),reappDocs=_rd[0],setReappDocs=_rd[1];
+    var _rb=useState(''),reappBusy=_rb[0],setReappBusy=_rb[1];   // 업로드 중인 docType key
+    var _rm=useState(''),reappMsg=_rm[0],setReappMsg=_rm[1];
+    var reappDone = reappDocs.filter(function(d){return d.uploaded}).length;
+    var reappStatus = reappDocs.length&&reappDone===reappDocs.length?'submitted':(reappDone>0?'partial':'pending');
+
+    function onReappFile(docKey,e){
+      var f=(e.target.files||[])[0];
+      e.target.value='';
+      if(!f) return;
+      if(['application/pdf','image/jpeg','image/png'].indexOf(f.type)===-1){setReappMsg('Only PDF, JPG, or PNG files are allowed. / PDF·JPG·PNG만 업로드할 수 있습니다.');return;}
+      if(f.size>10*1024*1024){setReappMsg('File exceeds the 10MB limit: '+f.name);return;}
+      setReappMsg(''); setReappBusy(docKey);
+      var reader=new FileReader();
+      reader.onload=function(){
+        var b64=String(reader.result).split(',')[1];
+        callApi('uploadReappointmentFile',{token:sessionStorage.getItem('portal_token'),docType:docKey,file:{name:f.name,mimeType:f.type,data:b64}}).then(function(res){
+          setReappBusy('');
+          if(res.expired){handleLogout();return;}
+          if(!res.success){setReappMsg(res.message||('Upload failed: '+f.name));return;}
+          if(res.status&&res.status.docTypes) setReappDocs(res.status.docTypes);
+        }).catch(function(){setReappBusy('');setReappMsg('Network error while uploading '+f.name);});
+      };
+      reader.onerror=function(){setReappBusy('');setReappMsg('Could not read file: '+f.name);};
+      reader.readAsDataURL(f);
+    }
+
+    var reappPortalCard = h(Card,null,
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}},
+        h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📄 Reappointment Documents'),
+        Badge({status:reappStatus})),
+      h('p',{style:{fontSize:12,color:T.sub,margin:'0 0 12px'}},'재임용 서류 제출'),
+      h('div',{style:{marginBottom:12,padding:'10px 12px',background:'#f8f9fb',borderRadius:8,fontSize:12,color:T.sub,lineHeight:1.55}},
+        h('p',{style:{margin:0,color:T.text}},'Please upload each of the documents below. PDF, JPG, or PNG — up to 10MB per file.'),
+        h('p',{style:{margin:'4px 0 0'}},'아래 서류를 각각 업로드해 주세요. PDF·JPG·PNG, 파일당 10MB.'),
+        h('p',{style:{margin:'4px 0 0'}},'Re-uploading replaces the previous submission for that document. / 같은 서류를 다시 올리면 최신 파일로 갱신됩니다.')),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+        reappDocs.map(function(d){
+          var busy = reappBusy===d.key;
+          return h('div',{key:d.key,style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,padding:'10px 12px',background:d.uploaded?'#f1f8f3':'#f8f9fb',border:'1px solid '+(d.uploaded?'#cfe6d8':T.bdr),borderRadius:8}},
+            h('div',{style:{minWidth:0}},
+              h('div',{style:{fontSize:13,fontWeight:600,color:d.uploaded?T.green:T.text}},(d.uploaded?'✓ ':'')+d.name),
+              h('div',{style:{fontSize:11,color:T.sub,marginTop:1}},d.nameKr),
+              d.uploaded&&h('div',{style:{fontSize:11,color:T.sub,marginTop:3,wordBreak:'break-all'}},'📎 '+d.fileName+(d.uploadedAt?(' · '+d.uploadedAt):''))),
+            h('label',{style:{flexShrink:0,display:'inline-flex',alignItems:'center',gap:5,padding:'7px 14px',background:reappBusy?'#9ca3af':(d.uploaded?'rgba(0,55,100,.06)':T.navy),color:d.uploaded&&!reappBusy?T.navy:'#fff',borderRadius:9,fontSize:12,fontWeight:600,cursor:reappBusy?'wait':'pointer',whiteSpace:'nowrap'}},
+              busy?'Uploading…':(d.uploaded?'Replace ↑':'Upload ↑'),
+              h('input',{type:'file',accept:'.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png',disabled:!!reappBusy,onChange:function(e){onReappFile(d.key,e)},style:{display:'none'}})));
+        })),
+      reappMsg&&h('div',{style:{marginTop:10,padding:'8px 12px',background:reappBusy?'#f8f9fb':'#fef2f2',color:reappBusy?T.sub:T.red,borderRadius:8,fontSize:12}},reappMsg));
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
       h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Documents'),
       h(Card,null,
@@ -611,7 +667,7 @@ function App(){
                 h('span',{style:{flex:1}},r.title),
                 h('span',{style:{fontSize:12,color:T.navy,fontWeight:600}},'Open →'));
             })))),
-      faculty.documents.reappointment.applicable&&h(Card,null,
+      faculty.documents.reappointment.applicable&&(reapp.mode==='portal'?reappPortalCard:h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📄 Faculty Affairs Reappointment Documents'),
           Badge({status:faculty.documents.reappointment.status})),
@@ -630,7 +686,7 @@ function App(){
           })),
         faculty.documents.reappointment.status!=='submitted'&&faculty.documents.reappointment.link?
           h('a',{href:faculty.documents.reappointment.link,target:'_blank',rel:'noopener noreferrer',style:{padding:'8px 16px',background:T.navy,color:'#fff',borderRadius:8,fontSize:13,fontWeight:600,fontFamily:'inherit',display:'inline-flex',alignItems:'center',gap:6,textDecoration:'none',width:'fit-content'}},'Submit Documents →')
-        :null)
+        :null))
     );
   }
 
