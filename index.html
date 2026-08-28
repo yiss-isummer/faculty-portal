@@ -127,6 +127,7 @@ function loadPortalData(token){
       eventsOpen:!(ex&&ex.open===false),   // events_open=N 이면 Events 탭 숨김
       documents: dash.documents || MOCK.documents,
       courses: dash.courses || MOCK.courses,
+      syllabusEdit: dash.syllabusEdit || {},   // 마감일 안내 (My Courses 'Editable until …') — 빠져 있어서 문구가 안 보였음 (8/28)
       housing: dash.housing || MOCK.housing,
       resources: dash.resources || MOCK.resources,
       salary: dash.salary || MOCK.salary,
