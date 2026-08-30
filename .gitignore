@@ -13,10 +13,12 @@ Faculty Portal 검수.docx
 교수자 은행정보_2025국제하계대학 기준.xlsx
 검수_*.md
 외화송금_*.md
+disbursement/
 개인정보동의고지문_*.docx
 YISS_Portal_Guide_Test_*.docx
 
 # 내부 문서 (public repo 비공개 — 로컬 유지)
+인수인계*
 CLAUDE.md
 PORTAL_DEV_GUIDE.md
 FACULTY_PORTAL_USER_GUIDE.md
