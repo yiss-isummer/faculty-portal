@@ -731,6 +731,9 @@ function App(){
     var _er=useState(''),evErr=_er[0],setEvErr=_er[1];
     var _p=useState({}),picks=_p[0],setPicks=_p[1];          // eventId -> 선택(제출 전)
     var _x=useState({}),extras=_x[0],setExtras=_x[1];         // eventId -> 추가 자유입력(제출 전)
+    var _o=useState({}),others=_o[0],setOthers=_o[1];         // eventId -> 'Other' 선택 시 자유입력(제출 전)
+    // 'Other' 판별 — 백엔드 isOtherOption_ 과 같은 기준을 유지할 것
+    function isOther(opt){var v=String(opt==null?'':opt).trim().toLowerCase();return v==='other'||v==='기타';}
     var _s=useState(null),submitting=_s[0],setSubmitting=_s[1]; // 제출 중인 eventId
 
     function loadEvents(){
@@ -750,10 +753,12 @@ function App(){
       if(!choice){alert('Please select a response.');return;}
       var extraVal=(extras[ev.id]||'').trim();
       if(ev.extraLabel&&ev.extraRequired&&!extraVal){alert('Please answer: '+ev.extraLabel);return;}
-      if(!confirm('Submit "'+choice+'"?\n\nResponses cannot be changed after submitting.')) return;
+      var otherVal=isOther(choice)?(others[ev.id]||'').trim():'';
+      if(isOther(choice)&&!otherVal){alert('Please specify your response for "Other".');return;}
+      if(!confirm('Submit "'+choice+(otherVal?' — '+otherVal:'')+'"?\n\nResponses cannot be changed after submitting.')) return;
       var token=sessionStorage.getItem('portal_token');
       setSubmitting(ev.id);
-      callApi('submitRsvp',{token:token,eventId:ev.id,response:choice,extra:extraVal}).then(function(res){
+      callApi('submitRsvp',{token:token,eventId:ev.id,response:choice,extra:extraVal,otherText:otherVal}).then(function(res){
         setSubmitting(null);
         if(res.expired){handleLogout();return;}
         if(!res.success){alert(res.message||'Submit failed.');return;}
@@ -802,13 +807,19 @@ function App(){
                   opt);
               })
             ),
+            isOther(picks[ev.id])&&h('div',{style:{marginBottom:12}},
+              h('label',{style:{fontSize:12,fontWeight:600,color:T.text,display:'block',marginBottom:6}},'Please specify',h('span',{style:{color:T.red}},' *')),
+              h('input',{type:'text',value:others[ev.id]||'',placeholder:'Type your response…',onChange:function(e){var v=e.target.value;setOthers(function(p){return Object.assign({},p,(function(){var x={};x[ev.id]=v;return x;})())})},
+                style:S(inputStyle(),{width:'100%'})})
+            ),
             ev.extraLabel&&h('div',{style:{marginBottom:12}},
               h('label',{style:{fontSize:12,fontWeight:600,color:T.text,display:'block',marginBottom:6}},ev.extraLabel,ev.extraRequired&&h('span',{style:{color:T.red}},' *')),
               h('input',{type:'text',value:extras[ev.id]||'',placeholder:'Type your answer…',onChange:function(e){var v=e.target.value;setExtras(function(p){return Object.assign({},p,(function(){var x={};x[ev.id]=v;return x;})())})},style:S(inputStyle(),{fontSize:13,padding:'8px 10px'})})
             ),
             (function(){
               var missingExtra=ev.extraLabel&&ev.extraRequired&&!(extras[ev.id]||'').trim();
-              var disabled=busy||!picks[ev.id]||missingExtra;
+              var missingOther=isOther(picks[ev.id])&&!(others[ev.id]||'').trim();
+              var disabled=busy||!picks[ev.id]||missingExtra||missingOther;
               return h('div',{style:{display:'flex',justifyContent:'flex-end'}},
                 h('button',{onClick:function(){submit(ev)},disabled:disabled,
                   style:{padding:'9px 20px',background:disabled?'#9ca3af':T.navy,color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:600,fontFamily:'inherit',cursor:disabled?'not-allowed':'pointer'}},
@@ -1168,6 +1179,23 @@ function App(){
                   h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},'행사 RSVP 탭 노출 여부. 행사를 운영하지 않는 학기에는 Closed 로 두세요.')),
                 h('select',{value:salarySettings.events_open==='N'?'N':'Y',onChange:function(e){var v=e.target.value;setSalarySettings(function(prev){var n=Object.assign({},prev);n.events_open=v;return n;})},style:S(inputStyle(),{flex:'0 0 110px',width:'auto',fontSize:13,padding:'6px 8px'})},
                   h('option',{value:'Y'},'Open'),h('option',{value:'N'},'Closed')))),
+            h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
+              h('div',{style:{fontSize:13,fontWeight:700,color:T.navy,marginBottom:6}},'Reappointment'),
+              h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',background:(salarySettings.reappointment_open==='N')?'#f8f9fb':T.greenL,borderRadius:8}},
+                h('div',null,
+                  h('div',{style:{fontSize:13,fontWeight:700,color:(salarySettings.reappointment_open==='N')?T.sub:T.green}},(salarySettings.reappointment_open==='N')?'Reappointment: HIDDEN from faculty':'Reappointment: VISIBLE to faculty'),
+                  h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},'Documents의 재임용 카드 노출 여부. Closed 로 두면 카드가 숨겨지고 업로드·동의서 제출도 서버에서 차단됩니다.')),
+                h('select',{value:salarySettings.reappointment_open==='N'?'N':'Y',onChange:function(e){var v=e.target.value;setSalarySettings(function(prev){var n=Object.assign({},prev);n.reappointment_open=v;return n;})},style:S(inputStyle(),{flex:'0 0 110px',width:'auto',fontSize:13,padding:'6px 8px'})},
+                  h('option',{value:'Y'},'Open'),h('option',{value:'N'},'Closed')))),
+            h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
+              h('div',{style:{fontSize:13,fontWeight:700,color:T.navy,marginBottom:6}},'Documents'),
+              ssField('Business Registration File ID','business_registration_file_id','Drive 파일 ID — 링크의 /d/ 와 /view 사이 문자열'),
+              h('div',{style:{fontSize:11,color:T.sub,marginTop:-4,marginBottom:2,lineHeight:1.5}},
+                '교수 화면 Documents > Program Resources 의 Business Registration 링크. 비우면 항목이 숨겨집니다. ',
+                h('b',null,'해당 Drive 파일을 \'링크가 있는 모든 사용자 — 뷰어\' 로 공유'),
+                '해야 교수가 열 수 있습니다. (이 값만 PortalSettings 가 아니라 계약 시트 Settings 탭에 저장됩니다.)'),
+              h('div',{style:{fontSize:11,color:T.sub,marginTop:6,lineHeight:1.5}},
+                '그 밖의 공용 자료 링크는 아래 ',h('b',null,'Useful Links'),' 카드에서 추가하세요 (PortalLinks 탭).')),
             h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:4}},
               h('button',{onClick:saveSettings,disabled:ssSaving,style:{padding:'6px 16px',background:T.navy,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,fontFamily:'inherit',cursor:ssSaving?'wait':'pointer',opacity:ssSaving?0.7:1}},ssSaving?'Saving…':'Save Settings'))
           ):null
