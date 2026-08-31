@@ -465,7 +465,7 @@ function App(){
         h('p',{style:{fontSize:12,opacity:.6,margin:'4px 0 0'}},'Faculty ID: '+faculty.employeeId)
       ),
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12}},
-        [{l:'Courses',v:faculty.courses.length,c:T.navy},!isFT&&{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].filter(Boolean).map(function(s,i){
+        [{l:'Courses',v:faculty.courses.length,c:T.navy},!isFT&&faculty.documents.contract.applicable!==false&&{l:'Contract',v:faculty.documents.contract.status==='signed'?'Signed':'Pending',c:faculty.documents.contract.status==='signed'?T.green:T.amber},{l:'Notices',v:faculty.notices.length,c:T.navy}].filter(Boolean).map(function(s,i){
           return h(Card,{key:i,style:{textAlign:'center',padding:'18px 12px'}},
             h('div',{style:{fontSize:24,fontWeight:700,color:s.c}},s.v),
             h('div',{style:{fontSize:12,color:T.sub,marginTop:2}},s.l));
@@ -475,7 +475,7 @@ function App(){
         h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:'0 0 14px'}},'Action Required'),
         (function(){
           var actions=[];
-          if(!isFT && faculty.documents.contract.status!=='signed'){
+          if(!isFT && faculty.documents.contract.applicable!==false && faculty.documents.contract.status!=='signed'){
             actions.push({key:'contract',label:'Sign your employment contract — check your email for the signing link and all related documents.',link:faculty.documents.contract.link,tab:'documents'});
           }
           if(faculty.documents.reappointment.applicable && faculty.documents.reappointment.status!=='submitted'){
@@ -648,7 +648,7 @@ function App(){
       reappMsg&&h('div',{style:{marginTop:10,padding:'8px 12px',background:reappBusy?'#f8f9fb':'#fef2f2',color:reappBusy?T.sub:T.red,borderRadius:8,fontSize:12}},reappMsg));
     return h('div',{style:{display:'flex',flexDirection:'column',gap:16}},
       h('h2',{style:{fontSize:20,fontWeight:700,color:T.navy,margin:0,fontFamily:"'Playfair Display',serif"}},'Documents'),
-      h(Card,null,
+      faculty.documents.contract.applicable!==false&&h(Card,null,
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}},
           h('h3',{style:{fontSize:15,fontWeight:700,color:T.navy,margin:0}},'📝 Office of International Affairs Contract'),
           Badge({status:faculty.documents.contract.status})),
@@ -1218,6 +1218,14 @@ function App(){
                   h('div',{style:{fontSize:13,fontWeight:700,color:(salarySettings.reappointment_open==='N')?T.sub:T.green}},(salarySettings.reappointment_open==='N')?'Reappointment: HIDDEN from faculty':'Reappointment: VISIBLE to faculty'),
                   h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},'Documents의 재임용 카드 노출 여부. Closed 로 두면 카드가 숨겨지고 업로드·동의서 제출도 서버에서 차단됩니다.')),
                 h('select',{value:salarySettings.reappointment_open==='N'?'N':'Y',onChange:function(e){var v=e.target.value;setSalarySettings(function(prev){var n=Object.assign({},prev);n.reappointment_open=v;return n;})},style:S(inputStyle(),{flex:'0 0 110px',width:'auto',fontSize:13,padding:'6px 8px'})},
+                  h('option',{value:'Y'},'Open'),h('option',{value:'N'},'Closed')))),
+            h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
+              h('div',{style:{fontSize:13,fontWeight:700,color:T.navy,marginBottom:6}},'Contract'),
+              h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'10px 12px',background:(salarySettings.contract_open==='N')?'#f8f9fb':T.greenL,borderRadius:8}},
+                h('div',null,
+                  h('div',{style:{fontSize:13,fontWeight:700,color:(salarySettings.contract_open==='N')?T.sub:T.green}},(salarySettings.contract_open==='N')?'Contract: HIDDEN from faculty':'Contract: VISIBLE to faculty'),
+                  h('div',{style:{fontSize:11,color:T.sub,marginTop:2}},'Documents의 계약 카드 + Dashboard 계약 표시. Closed 로 두면 서명도 서버에서 차단됩니다. ⚠️ Invitation Letter·Business Registration 이 이 카드 안에 있어 함께 숨겨집니다.')),
+                h('select',{value:salarySettings.contract_open==='N'?'N':'Y',onChange:function(e){var v=e.target.value;setSalarySettings(function(prev){var n=Object.assign({},prev);n.contract_open=v;return n;})},style:S(inputStyle(),{flex:'0 0 110px',width:'auto',fontSize:13,padding:'6px 8px'})},
                   h('option',{value:'Y'},'Open'),h('option',{value:'N'},'Closed')))),
             h('div',{style:{marginTop:14,paddingTop:12,borderTop:'1px solid '+T.bdr}},
               h('div',{style:{fontSize:13,fontWeight:700,color:T.navy,marginBottom:6}},'Documents'),
